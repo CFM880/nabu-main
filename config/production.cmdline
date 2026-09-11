@@ -1,0 +1,1 @@
+root=PARTLABEL=linux rw fw_devlink=permissive modprobe.blacklist=venus_core,qcom_iris module_blacklist=venus_core,qcom_iris

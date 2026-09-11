@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# Iteration product: build only the audio overlay against the shared out/.
+[product]
+name    = "audio-only"
+modules = ["nabu-audio"]
+release = "6.14.11-nabu1"
+image   = false

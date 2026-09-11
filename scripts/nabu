@@ -1,0 +1,586 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-2.0-only
+"""nabu-main unified build pipeline.
+
+main is generic: it only ever asks each module the four contract questions in
+its nabu-module.toml (provides / build / artifacts / install) and never embeds
+a module name in its logic.
+"""
+from __future__ import annotations
+
+import argparse
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tomllib
+from dataclasses import dataclass, field
+from pathlib import Path
+
+MAIN_DIR = Path(__file__).resolve().parent.parent
+ROOT = MAIN_DIR.parent
+LOCK_PATH = MAIN_DIR / "repos.lock"
+OUT_DIR = MAIN_DIR / "out"
+ARTIFACTS_BASE = MAIN_DIR / "artifacts"
+
+ARCH = "arm64"
+CROSS_COMPILE = os.environ.get("NABU_CROSS_COMPILE", "aarch64-linux-gnu-")
+JOBS = os.environ.get("NABU_JOBS", str(os.cpu_count() or 1))
+
+
+def log(msg: str) -> None:
+    print(f"[nabu] {msg}", flush=True)
+
+
+def die(msg: str) -> "NoReturn":
+    print(f"[nabu] error: {msg}", file=sys.stderr, flush=True)
+    raise SystemExit(1)
+
+
+def run(cmd: list, cwd: Path | None = None, env: dict | None = None) -> None:
+    log("$ " + " ".join(str(c) for c in cmd))
+    subprocess.run([str(c) for c in cmd], cwd=cwd, env=env, check=True)
+
+
+def run_capture(cmd: list, cwd: Path | None = None) -> str:
+    return subprocess.run(
+        [str(c) for c in cmd], cwd=cwd, check=True,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+    ).stdout.strip()
+
+
+@dataclass
+class Module:
+    name: str
+    path: Path
+    description: str = ""
+    requires: list = field(default_factory=list)
+    provides: dict = field(default_factory=dict)
+    build: dict = field(default_factory=dict)
+    hooks: dict = field(default_factory=dict)
+    artifacts: dict = field(default_factory=dict)
+    install: dict = field(default_factory=dict)
+
+    @property
+    def dtsi(self) -> list:
+        return list(self.provides.get("dtsi", []))
+
+    @property
+    def patches(self) -> list:
+        return list(self.provides.get("patches", []))
+
+    @property
+    def overlay(self):
+        return self.provides.get("overlay")
+
+    @property
+    def config_fragments(self) -> list:
+        return list(self.provides.get("config", []))
+
+    @property
+    def kernel_targets(self) -> list:
+        return list(self.build.get("kernel_targets", []))
+
+
+def load_lock() -> dict:
+    if not LOCK_PATH.is_file():
+        die(f"missing {LOCK_PATH}")
+    with LOCK_PATH.open("rb") as fh:
+        return tomllib.load(fh)
+
+
+def kernel_path(lock: dict) -> Path:
+    path = ROOT / lock["kernel"]["path"]
+    if not (path / "Makefile").is_file():
+        die(f"not a Linux source tree: {path}")
+    return path
+
+
+def discover(lock: dict) -> dict:
+    modules: dict = {}
+    for name, rel in lock["modules"].items():
+        path = (ROOT / rel).resolve()
+        manifest_path = path / "nabu-module.toml"
+        if not manifest_path.is_file():
+            die(f"module {name}: missing {manifest_path}")
+        with manifest_path.open("rb") as fh:
+            data = tomllib.load(fh)
+        if data.get("schema") != 1:
+            die(f"module {name}: unsupported schema {data.get('schema')!r}")
+        mod = Module(
+            name=data["module"]["name"],
+            path=path,
+            description=data["module"].get("description", ""),
+            requires=list(data["module"].get("requires", [])),
+            provides=data.get("provides", {}),
+            build=data.get("build", {}),
+            hooks=data.get("hooks", {}),
+            artifacts=data.get("artifacts", {}),
+            install=data.get("install", {}),
+        )
+        if mod.name != name:
+            die(f"module {name}: manifest declares name {mod.name!r}")
+        modules[name] = mod
+    return modules
+
+
+def resolve(modules: dict, selected_names: list) -> list:
+    """Topologically sort selected modules; stable by name within a layer."""
+    selected = set(selected_names)
+    for name in selected:
+        for dep in modules[name].requires:
+            if dep not in modules:
+                die(f"{name}: unknown dependency {dep!r}")
+    order: list = []
+    visited: dict = {}
+
+    def visit(name: str, stack: list) -> None:
+        if visited.get(name) == "done":
+            return
+        if visited.get(name) == "active":
+            die(f"dependency cycle: {' -> '.join(stack + [name])}")
+        visited[name] = "active"
+        for dep in sorted(modules[name].requires):
+            visit(dep, stack + [name])
+        visited[name] = "done"
+        order.append(modules[name])
+
+    for name in sorted(selected):
+        visit(name, [])
+    return [m for m in order if m.name in selected]
+
+
+def load_product(name: str) -> dict:
+    path = MAIN_DIR / "products" / f"{name}.toml"
+    if not path.is_file():
+        die(f"unknown product {name!r}: missing {path}")
+    with path.open("rb") as fh:
+        data = tomllib.load(fh)
+    product = data.get("product", {})
+    if not product.get("name") or not product.get("modules"):
+        die(f"product {name}: missing name/modules")
+    return product
+
+
+def select(modules: dict, product: dict) -> list:
+    """Product order: drives DTS include order and artifact layout."""
+    names = list(product["modules"])
+    for name in names:
+        if name not in modules:
+            die(f"product {product['name']}: unknown module {name!r}")
+    return [modules[name] for name in names]
+
+
+def git(kernel: Path, *args: str) -> None:
+    run(["git", "-C", kernel, *args])
+
+
+def reset_kernel(kernel: Path, base: str) -> None:
+    if not (kernel / ".git").exists():
+        die(f"{kernel} is not a git worktree")
+    head = run_capture(["git", "-C", kernel, "rev-parse", "HEAD"])
+    if head != base:
+        log(f"resetting kernel {head[:12]} -> {base[:12]}")
+    git(kernel, "reset", "--hard", base)
+    # Remove untracked/ignored overlay files but keep existing out dirs.
+    git(kernel, "clean", "-fdx", "-e", "out", "-e", "out-iris1")
+
+
+def overlay_copy(overlay: Path, kernel: Path) -> None:
+    if not overlay.is_dir():
+        die(f"overlay directory not found: {overlay}")
+    for source in sorted(overlay.rglob("*")):
+        if source.is_dir():
+            continue
+        rel = source.relative_to(overlay)
+        target = kernel / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+        os.chmod(target, source.stat().st_mode | 0o200)
+    log(f"installed overlay {overlay.relative_to(ROOT)} -> kernel")
+
+
+def apply_patch(kernel: Path, patch: Path) -> None:
+    if not patch.is_file():
+        die(f"missing patch: {patch}")
+    if subprocess.run(["git", "-C", kernel, "apply", "--reverse", "--check", str(patch)],
+                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
+        log(f"patch already applied: {patch.relative_to(ROOT)}")
+        return
+    run(["git", "-C", kernel, "apply", str(patch)])
+    log(f"applied patch: {patch.relative_to(ROOT)}")
+
+
+def cmd_apply(args) -> None:
+    lock = load_lock()
+    modules = discover(lock)
+    product = load_product(args.product)
+    order = resolve(modules, product["modules"])
+    kernel = kernel_path(lock)
+    if not args.no_reset:
+        reset_kernel(kernel, lock["kernel"]["base"])
+    else:
+        head = run_capture(["git", "-C", kernel, "rev-parse", "HEAD"])
+        if head != lock["kernel"]["base"]:
+            die(f"kernel HEAD {head[:12]} is not base {lock['kernel']['base'][:12]}")
+    for mod in order:
+        for rel in mod.patches:
+            apply_patch(kernel, mod.path / rel)
+        if mod.overlay:
+            overlay_copy(mod.path / mod.overlay, kernel)
+    log(f"apply complete for product {product['name']}: {', '.join(m.name for m in order)}")
+
+
+def dts_name(product: dict) -> str:
+    dtb = product.get("dtb") or f"sm8150-xiaomi-nabu-{product['name']}.dtb"
+    if not dtb.endswith(".dtb"):
+        die(f"product dtb must end with .dtb: {dtb}")
+    return dtb[:-4] + ".dts", dtb
+
+
+def cmd_compose(args) -> None:
+    lock = load_lock()
+    modules = discover(lock)
+    product = load_product(args.product)
+    order = select(modules, product)
+    kernel = kernel_path(lock)
+    dts_file, dtb = dts_name(product)
+    dts_dir = kernel / "arch/arm64/boot/dts/qcom"
+    if not dts_dir.is_dir():
+        die(f"missing device tree directory: {dts_dir}")
+
+    lines = [
+        "/* GENERATED by nabu-main - do not edit */",
+        f"/* product: {product['name']} */",
+        "",
+        '#include "sm8150-xiaomi-nabu.dts"',
+    ]
+    for mod in order:
+        for rel in mod.dtsi:
+            lines.append(f'#include "{Path(rel).name}"')
+    lines.append("")
+    (dts_dir / dts_file).write_text("\n".join(lines))
+    log(f"composed {dts_file} from {', '.join(m.name for m in order)}")
+
+    makefile = dts_dir / "Makefile"
+    entry = f"dtb-$(CONFIG_ARCH_QCOM)\t+= {dtb}"
+    text = makefile.read_text()
+    if dtb not in text:
+        with makefile.open("a") as fh:
+            fh.write(f"\n# GENERATED by nabu-main\n{entry}\n")
+        log(f"registered {dtb} in qcom/Makefile")
+
+
+def kernel_release_base(kernel: Path) -> str:
+    return run_capture(["make", "-s", "-C", kernel, "kernelversion"])
+
+
+def cmd_config(args) -> None:
+    lock = load_lock()
+    modules = discover(lock)
+    product = load_product(args.product)
+    order = resolve(modules, product["modules"])
+    kernel = kernel_path(lock)
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    base = MAIN_DIR / "config" / "base.config"
+    if not base.is_file():
+        die(f"missing base config: {base}")
+    text = base.read_text()
+    text = re.sub(r"^CONFIG_LOCALVERSION=.*\n", "", text, flags=re.M)
+    text = re.sub(r"^# CONFIG_LOCALVERSION is not set\n", "", text, flags=re.M)
+    text = re.sub(r"^CONFIG_LOCALVERSION_AUTO=.*\n", "", text, flags=re.M)
+    text = re.sub(r"^# CONFIG_LOCALVERSION_AUTO is not set\n", "", text, flags=re.M)
+    release = product["release"]
+    kv = kernel_release_base(kernel)
+    localversion = release[len(kv):] if release.startswith(kv) else f"-{release}"
+    text += (
+        f'\nCONFIG_LOCALVERSION="{localversion}"\n'
+        "# CONFIG_LOCALVERSION_AUTO is not set\n"
+    )
+    (OUT_DIR / ".config").write_text(text)
+
+    fragments = [str(MAIN_DIR / rel) for rel in product.get("config", [])]
+    for mod in order:
+        fragments += [str(mod.path / rel) for rel in mod.config_fragments]
+    missing = [f for f in fragments if not Path(f).is_file()]
+    if missing:
+        die("missing config fragments: " + ", ".join(missing))
+    if fragments:
+        run(["scripts/kconfig/merge_config.sh", "-m", "-O", str(OUT_DIR),
+             str(OUT_DIR / ".config"), *fragments], cwd=kernel)
+    run(["make", "-C", kernel, f"O={OUT_DIR}", f"ARCH={ARCH}",
+         f"CROSS_COMPILE={CROSS_COMPILE}", "LOCALVERSION=", "olddefconfig"])
+    run(["make", "-C", kernel, f"O={OUT_DIR}", f"ARCH={ARCH}",
+         f"CROSS_COMPILE={CROSS_COMPILE}", "LOCALVERSION=", "syncconfig"])
+    actual = run_capture(["make", "-s", "-C", kernel, f"O={OUT_DIR}",
+                          f"ARCH={ARCH}", "LOCALVERSION=", "kernelrelease"])
+    log(f"configured release: {actual}")
+    if actual != release:
+        die(f"configured release {actual!r} != product release {release!r}")
+
+
+def make_base(kernel: Path) -> list:
+    return ["make", "-C", kernel, f"O={OUT_DIR}", f"ARCH={ARCH}",
+            f"CROSS_COMPILE={CROSS_COMPILE}", "LOCALVERSION=", f"-j{JOBS}"]
+
+
+def hook_env(module: Module, kernel: Path, artifact_dir: Path) -> dict:
+    env = dict(os.environ)
+    env.update({
+        "NABU_KERNEL_TREE": str(kernel),
+        "NABU_OUT": str(OUT_DIR),
+        "NABU_RELEASE": os.environ.get("NABU_PRODUCT_RELEASE", ""),
+        "NABU_ARCH": ARCH,
+        "NABU_CROSS_COMPILE": CROSS_COMPILE,
+        "NABU_JOBS": str(JOBS),
+        "NABU_MODULE_DIR": str(module.path),
+        "NABU_ARTIFACTS": str(artifact_dir),
+    })
+    return env
+
+
+def cmd_build(args) -> None:
+    lock = load_lock()
+    modules = discover(lock)
+    product = load_product(args.product)
+    order = resolve(modules, product["modules"])
+    kernel = kernel_path(lock)
+    dts_file, dtb = dts_name(product)
+    actual = run_capture(["make", "-s", "-C", kernel, f"O={OUT_DIR}",
+                          f"ARCH={ARCH}", "LOCALVERSION=", "kernelrelease"])
+    if actual != product["release"]:
+        die(f"out/ is configured for {actual!r}, expected {product['release']!r}; run config first")
+
+    if product.get("image"):
+        run(make_base(kernel) + ["Image"])
+    run(make_base(kernel) + ["modules_prepare"])
+    run(make_base(kernel) + ["modules"])
+    if (kernel / "arch/arm64/boot/dts/qcom" / dts_file).is_file():
+        run(make_base(kernel) + [f"qcom/{dtb}"])
+
+    artifact_dir = ARTIFACTS_BASE / product["name"]
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    for mod in order:
+        if mod.build.get("hook"):
+            env = hook_env(mod, kernel, artifact_dir)
+            env["NABU_PRODUCT_RELEASE"] = product["release"]
+            hook = mod.path / mod.build["hook"]
+            if not hook.is_file():
+                die(f"{mod.name}: missing build hook {hook}")
+            log(f"running build hook for {mod.name}")
+            run([hook], cwd=mod.path, env=env)
+
+
+def artifact_source(mod: Module, spec: str) -> Path:
+    if spec.startswith("out:"):
+        return OUT_DIR / spec[4:]
+    if spec.startswith("module:"):
+        return mod.path / spec[7:]
+    die(f"{mod.name}: artifact spec must start with 'out:' or 'module:': {spec}")
+
+
+def cmd_collect(args) -> None:
+    lock = load_lock()
+    modules = discover(lock)
+    product = load_product(args.product)
+    order = select(modules, product)
+    dts_file, dtb = dts_name(product)
+    artifact_dir = ARTIFACTS_BASE / product["name"]
+    if artifact_dir.exists():
+        shutil.rmtree(artifact_dir)
+    artifact_dir.mkdir(parents=True)
+
+    for mod in order:
+        if not mod.artifacts:
+            continue
+        for name, spec in mod.artifacts.items():
+            source = artifact_source(mod, spec)
+            if not source.is_file():
+                die(f"{mod.name}: declared artifact not found: {source}")
+            shutil.copy2(source, artifact_dir / name)
+            log(f"collected {mod.name}:{name}")
+    if product.get("image"):
+        shutil.copy2(OUT_DIR / "arch/arm64/boot/Image", artifact_dir / "Image")
+    if product.get("dtb") or dts_file:
+        dtb_src = OUT_DIR / "arch/arm64/boot/dts/qcom" / dtb
+        if dtb_src.is_file():
+            shutil.copy2(dtb_src, artifact_dir / dtb)
+    log(f"artifacts collected in {artifact_dir}")
+
+
+def cmd_package(args) -> None:
+    lock = load_lock()
+    product = load_product(args.product)
+    artifact_dir = ARTIFACTS_BASE / product["name"]
+    if not product.get("uki"):
+        log("product declares no UKI; nothing to package")
+        return
+    dts_file, dtb = dts_name(product)
+    uki = artifact_dir / product["uki"]
+    cmd = [
+        "python3", "/usr/bin/ukify", "build",
+        "--linux", str(artifact_dir / "Image"),
+        "--devicetree", str(artifact_dir / dtb),
+        "--cmdline", "@" + str(MAIN_DIR / product["cmdline"]),
+        "--os-release", "@/etc/os-release",
+        "--uname", product["release"],
+        "--sbat", "@" + str(MAIN_DIR / product.get("sbat", "config/uki.sbat")),
+        "--efi-arch", "aa64",
+        "--output", str(uki),
+    ]
+    stub = os.environ.get("NABU_UKI_STUB")
+    if stub:
+        cmd += ["--stub", stub]
+    run(cmd)
+    log(f"packaged {uki}")
+
+
+def expand_release(path: str, release: str) -> str:
+    return path.replace("@release@", release)
+
+
+def install_source(mod: Module, artifact_dir: Path, key: str) -> Path:
+    if key in mod.artifacts:
+        return artifact_dir / key
+    for prefix, field_name in (("systemd/", "systemd"), ("modules_load/", "modules_load"),
+                               ("firmware/", "firmware"), ("userspace/", "userspace"),
+                               ("rules/", "rules")):
+        if key.startswith(prefix):
+            base = Path(key[len(prefix):]).name
+            for rel in mod.provides.get(field_name, []):
+                if Path(rel).name == base:
+                    return mod.path / rel
+            die(f"{mod.name}: {field_name} entry {base!r} not declared")
+    return mod.path / key
+
+
+def cmd_install(args) -> None:
+    if os.geteuid() != 0:
+        die("install must run as root")
+    lock = load_lock()
+    modules = discover(lock)
+    product = load_product(args.product)
+    order = select(modules, product)
+    artifact_dir = ARTIFACTS_BASE / product["name"]
+    manifest = artifact_dir / "install-manifest.tsv"
+    records = []
+    for mod in order:
+        for key, target in mod.install.items():
+            source = install_source(mod, artifact_dir, key)
+            if not source.is_file():
+                die(f"{mod.name}: install source not found: {source}")
+            target_path = Path(expand_release(target, product["release"]))
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            backup = ""
+            if target_path.exists() or target_path.is_symlink():
+                if target_path.is_file() and source.read_bytes() == target_path.read_bytes():
+                    continue
+                backup = str(target_path) + ".nabu-backup"
+                if not Path(backup).exists():
+                    shutil.copy2(target_path, backup)
+            shutil.copy2(source, target_path)
+            log(f"installed {target_path}")
+            records.append(f"{target_path}\t{source}\t{backup}")
+        if mod.hooks.get("install"):
+            env = hook_env(mod, kernel_path(lock), artifact_dir)
+            env["NABU_PRODUCT_RELEASE"] = product["release"]
+            run([mod.path / mod.hooks["install"]], cwd=mod.path, env=env)
+    manifest.write_text("\n".join(records) + ("\n" if records else ""))
+    log(f"install manifest written to {manifest}")
+
+
+def cmd_rollback(args) -> None:
+    if os.geteuid() != 0:
+        die("rollback must run as root")
+    product = load_product(args.product)
+    manifest = ARTIFACTS_BASE / product["name"] / "install-manifest.tsv"
+    if not manifest.is_file():
+        die(f"missing install manifest: {manifest}")
+    for line in reversed(manifest.read_text().splitlines()):
+        if not line.strip():
+            continue
+        target, _source, backup = line.split("\t")
+        target_path = Path(target)
+        if backup:
+            shutil.copy2(backup, target_path)
+            Path(backup).unlink()
+            log(f"restored {target_path}")
+        elif target_path.exists():
+            target_path.unlink()
+            log(f"removed {target_path}")
+    log("rollback complete")
+
+
+def cmd_verify(args) -> None:
+    lock = load_lock()
+    modules = discover(lock)
+    product = load_product(args.product)
+    order = select(modules, product)
+    artifact_dir = ARTIFACTS_BASE / product["name"]
+    release = product["release"]
+    failures = []
+    for mod in order:
+        for name in mod.artifacts:
+            ko = artifact_dir / name
+            if not ko.is_file():
+                failures.append(f"{mod.name}: missing artifact {name}")
+                continue
+            if shutil.which("modinfo"):
+                vermagic = run_capture(["modinfo", "-F", "vermagic", str(ko)])
+                got = vermagic.split()[0]
+                if got != release:
+                    failures.append(f"{name}: vermagic {got!r} != {release!r}")
+                    continue
+            log(f"ok {name}: {release}")
+    uki = product.get("uki")
+    if uki and (artifact_dir / uki).is_file():
+        blob = (artifact_dir / uki).read_bytes()
+        for needle in (release.encode(), b"root=PARTLABEL=linux"):
+            if needle not in blob:
+                failures.append(f"{uki}: missing {needle!r}")
+    if failures:
+        for f in failures:
+            print(f"[nabu] FAIL {f}", file=sys.stderr)
+        raise SystemExit(1)
+    log("verify complete")
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="nabu")
+    parser.add_argument("--product", "-p", default="production")
+    sub = parser.add_subparsers(dest="command", required=True)
+    for name in ("discover", "apply", "compose", "config", "build",
+                 "collect", "package", "install", "rollback", "verify", "all"):
+        cmd = sub.add_parser(name)
+        if name == "apply":
+            cmd.add_argument("--no-reset", action="store_true")
+    return parser
+
+
+def main() -> None:
+    args = build_parser().parse_args()
+    handlers = {
+        "apply": cmd_apply, "compose": cmd_compose, "config": cmd_config,
+        "build": cmd_build, "collect": cmd_collect, "package": cmd_package,
+        "install": cmd_install, "rollback": cmd_rollback, "verify": cmd_verify,
+    }
+    if args.command == "discover":
+        lock = load_lock()
+        modules = discover(lock)
+        product = load_product(args.product)
+        order = select(modules, product)
+        for mod in order:
+            print(f"{mod.name}: {mod.description}")
+        return
+    if args.command == "all":
+        for name in ("apply", "compose", "config", "build", "collect", "package", "verify"):
+            args.command = name
+            handlers[name](args)
+        return
+    handlers[args.command](args)
+
+
+if __name__ == "__main__":
+    main()

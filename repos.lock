@@ -1,0 +1,24 @@
+# nabu-main repository lock
+#
+# The kernel and every module are checked out next to this file.  nabu-main
+# never embeds module knowledge beyond these paths; the module contract lives
+# in each repository's nabu-module.toml.
+schema = 1
+
+[kernel]
+path = "linux"
+base = "5181e1358ddd6ea8028e841d928942373e6aebc8"
+
+[modules]
+nabu-iris          = "nabu-iris"
+nabu-camera        = "nabu-camera"
+nabu-audio         = "nabu-audio"
+nabu-accelerometer = "nabu-accelerometer"
+nabu-power         = "nabu-power"
+
+[commits]
+nabu-iris          = "e14d97089f512f35b4e56ae2f5974422292f1a8c"
+nabu-camera        = "f3f075a1e38c1cb80ca0a2f21e7b212f8508f95a"
+nabu-audio         = "656fd3bb66feb95e72164c8b3edb3b05de1389f1"
+nabu-accelerometer = "3ecbfbc461f3ee5517bd012630ab59f557264f31"
+nabu-power         = "7ab97ec97e1609fd595b26c9b3c00d2f8866a6d8"
