@@ -160,6 +160,7 @@ def load_product(name: str) -> dict:
     product = data.get("product", {})
     if not product.get("name") or not product.get("modules"):
         die(f"product {name}: missing name/modules")
+    product["install"] = data.get("install", {})
     return product
 
 
@@ -388,9 +389,18 @@ def cmd_collect(args) -> None:
     order = select(modules, product)
     dts_file, dtb = dts_name(product)
     artifact_dir = ARTIFACTS_BASE / product["name"]
+    # Preserve install/rollback state across re-collects.
+    state_names = ("module-tree.txt", "install-manifest.tsv")
+    saved_state = {}
     if artifact_dir.exists():
+        for state_name in state_names:
+            state_path = artifact_dir / state_name
+            if state_path.is_file():
+                saved_state[state_name] = state_path.read_bytes()
         shutil.rmtree(artifact_dir)
     artifact_dir.mkdir(parents=True)
+    for state_name, data in saved_state.items():
+        (artifact_dir / state_name).write_bytes(data)
 
     for mod in order:
         if not mod.artifacts:
@@ -419,6 +429,9 @@ def cmd_package(args) -> None:
         return
     dts_file, dtb = dts_name(product)
     uki = artifact_dir / product["uki"]
+    for needed in (artifact_dir / "Image", artifact_dir / dtb):
+        if not needed.is_file():
+            die(f"missing collected artifact {needed}; run 'make collect' first")
     cmd = [
         "python3", "/usr/bin/ukify", "build",
         "--linux", str(artifact_dir / "Image"),
@@ -456,6 +469,26 @@ def install_source(mod: Module, artifact_dir: Path, key: str) -> Path:
     return mod.path / key
 
 
+def install_module_tree(product: dict, artifact_dir: Path) -> None:
+    """Install the complete /lib/modules/<release> tree for a product kernel.
+
+    collect() only stages the modules a module declares; a bootable kernel also
+    needs every other built module, so the full tree is installed first and the
+    declared install mappings then act as assertions/overrides.
+    """
+    if not product.get("image"):
+        return
+    lock = load_lock()
+    kernel = kernel_path(lock)
+    release = product["release"]
+    install_root = Path(os.environ.get("INSTALL_MOD_PATH", "/"))
+    mod_root = install_root / "lib" / "modules" / release
+    existed = mod_root.exists()
+    run(make_base(kernel) + [f"INSTALL_MOD_PATH={install_root}", "modules_install"])
+    (artifact_dir / "module-tree.txt").write_text(f"{mod_root}\t{existed}\n")
+    log(f"installed full module tree: {mod_root}")
+
+
 def cmd_install(args) -> None:
     if os.geteuid() != 0:
         die("install must run as root")
@@ -464,8 +497,13 @@ def cmd_install(args) -> None:
     product = load_product(args.product)
     order = select(modules, product)
     artifact_dir = ARTIFACTS_BASE / product["name"]
+    artifact_dir.mkdir(parents=True, exist_ok=True)
     manifest = artifact_dir / "install-manifest.tsv"
     records = []
+    if product.get("uki") and not (args.no_uki if hasattr(args, "no_uki") else False):
+        if not (artifact_dir / product["uki"]).is_file():
+            die(f"missing product UKI: {artifact_dir / product['uki']}; run 'make package' (as your user) before 'sudo make install'")
+    install_module_tree(product, artifact_dir)
     for mod in order:
         for key, target in mod.install.items():
             source = install_source(mod, artifact_dir, key)
@@ -487,17 +525,51 @@ def cmd_install(args) -> None:
             env = hook_env(mod, kernel_path(lock), artifact_dir)
             env["NABU_PRODUCT_RELEASE"] = product["release"]
             run([mod.path / mod.hooks["install"]], cwd=mod.path, env=env)
+    install_uki(product, artifact_dir, rollback=False, dry=(args.no_uki if hasattr(args, "no_uki") else False))
     manifest.write_text("\n".join(records) + ("\n" if records else ""))
     log(f"install manifest written to {manifest}")
+
+
+def uki_install_env(product: dict, artifact_dir: Path) -> dict:
+    inst = product.get("install", {})
+    env = dict(os.environ)
+    env.update({
+        "NABU_ARTIFACTS": str(artifact_dir),
+        "NABU_UKI": product.get("uki", ""),
+        "NABU_RELEASE": product["release"],
+        "NABU_UKI_TARGET": inst.get("uki_target", ""),
+        "NABU_ESP": inst.get("esp", "/dev/disk/by-partlabel/esp"),
+        "NABU_ESP_MOUNT": inst.get("esp_mount", "/boot/efi"),
+        "NABU_BOOT_LABEL": inst.get("boot_label", f"nabu-{product['release']}"),
+        "NABU_BACKUP_DIR": inst.get("backup_dir", "/var/lib/nabu-main"),
+    })
+    return env
+
+
+def install_uki(product: dict, artifact_dir: Path, rollback: bool, dry: bool = False) -> None:
+    inst = product.get("install", {})
+    if not product.get("uki") or not inst.get("uki_target"):
+        return
+    if dry:
+        log("skipping product UKI install (--no-uki)")
+        return
+    script = MAIN_DIR / "scripts" / "install-uki.sh"
+    if not script.is_file():
+        die(f"missing product UKI installer: {script}")
+    cmd = [script] + (["--rollback"] if rollback else [])
+    run(cmd, env=uki_install_env(product, artifact_dir))
 
 
 def cmd_rollback(args) -> None:
     if os.geteuid() != 0:
         die("rollback must run as root")
     product = load_product(args.product)
-    manifest = ARTIFACTS_BASE / product["name"] / "install-manifest.tsv"
+    artifact_dir = ARTIFACTS_BASE / product["name"]
+    manifest = artifact_dir / "install-manifest.tsv"
+    install_uki(product, artifact_dir, rollback=True)
     if not manifest.is_file():
-        die(f"missing install manifest: {manifest}")
+        log("no module install manifest; UKI rollback only")
+        return
     for line in reversed(manifest.read_text().splitlines()):
         if not line.strip():
             continue
@@ -510,6 +582,13 @@ def cmd_rollback(args) -> None:
         elif target_path.exists():
             target_path.unlink()
             log(f"removed {target_path}")
+    tree_file = artifact_dir / "module-tree.txt"
+    if tree_file.is_file():
+        path, existed = tree_file.read_text().strip().split("\t")
+        if existed != "True" and Path(path).exists():
+            shutil.rmtree(path)
+            log(f"removed module tree {path}")
+        tree_file.unlink()
     log("rollback complete")
 
 
@@ -526,6 +605,8 @@ def cmd_verify(args) -> None:
             ko = artifact_dir / name
             if not ko.is_file():
                 failures.append(f"{mod.name}: missing artifact {name}")
+                continue
+            if not name.endswith(".ko"):
                 continue
             if shutil.which("modinfo"):
                 vermagic = run_capture(["modinfo", "-F", "vermagic", str(ko)])
@@ -556,6 +637,9 @@ def build_parser() -> argparse.ArgumentParser:
         cmd = sub.add_parser(name)
         if name == "apply":
             cmd.add_argument("--no-reset", action="store_true")
+        if name == "install":
+            cmd.add_argument("--no-uki", action="store_true",
+                             help="install modules/userspace but leave the ESP untouched")
     return parser
 
 

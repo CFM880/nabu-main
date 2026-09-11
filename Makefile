@@ -4,7 +4,7 @@
 PRODUCT ?= production
 NABU    := ./scripts/nabu
 
-.PHONY: all discover apply compose config build collect package verify install rollback clean distclean
+.PHONY: all discover apply compose config build collect package verify install install-modules rollback clean distclean
 
 all: apply compose config build collect package verify
 
@@ -26,7 +26,7 @@ build:
 collect:
 	$(NABU) --product $(PRODUCT) collect
 
-package:
+package: collect
 	$(NABU) --product $(PRODUCT) package
 
 verify:
@@ -34,6 +34,10 @@ verify:
 
 install:
 	$(NABU) --product $(PRODUCT) install
+
+# Install modules and userspace only; leave the ESP / boot entry untouched.
+install-modules:
+	$(NABU) --product $(PRODUCT) install --no-uki
 
 rollback:
 	$(NABU) --product $(PRODUCT) rollback
