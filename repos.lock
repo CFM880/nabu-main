@@ -6,8 +6,8 @@
 schema = 1
 
 [kernel]
-path = "linux"
-base = "5181e1358ddd6ea8028e841d928942373e6aebc8"
+path = "linux-6.18"
+base = "140e8f8726a9d6eafd2afe8b8089982121a4199b"
 
 [modules]
 nabu-iris          = "nabu-iris"

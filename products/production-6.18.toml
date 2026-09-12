@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# Production product on the sm8150/6.18 kernel branch: every nabu module
+# compiled into one kernel output and one unified release, packaged as a
+# single UKI (Image + composed DTB + cmdline).
+[product]
+name    = "production-6.18"
+modules = ["nabu-iris", "nabu-camera", "nabu-audio", "nabu-accelerometer", "nabu-power"]
+release = "6.18.0-nabu1"
+image   = true
+dtb     = "sm8150-xiaomi-nabu-production-6.18.dtb"
+cmdline = "config/production.cmdline"
+sbat    = "config/uki.sbat"
+uki     = "nabu-production-6.18.efi"
+
+# Product-level UKI install: a new ESP file plus its own UEFI boot entry.  The
+# previously booted entry is kept untouched as a fallback.
+[install]
+esp        = "/dev/disk/by-partlabel/esp"
+esp_mount  = "/boot/efi"
+uki_target = "EFI/ubuntu/6.18.0-nabu1-build1.efi"
+boot_label = "nabu-6.18.0-nabu1"
