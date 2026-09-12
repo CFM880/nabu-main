@@ -28,6 +28,11 @@ ARCH = "arm64"
 CROSS_COMPILE = os.environ.get("NABU_CROSS_COMPILE", "aarch64-linux-gnu-")
 JOBS = os.environ.get("NABU_JOBS", str(os.cpu_count() or 1))
 
+# Base configuration comes from the kernel branch itself: defconfig plus these
+# fragments (relative to the kernel tree).  Products may override via
+# [product] kernel_config = [...].
+KERNEL_CONFIG_FRAGMENTS = ["arch/arm64/configs/sm8150.config"]
+
 
 def log(msg: str) -> None:
     print(f"[nabu] {msg}", flush=True)
@@ -213,6 +218,26 @@ def apply_patch(kernel: Path, patch: Path) -> None:
     log(f"applied patch: {patch.relative_to(ROOT)}")
 
 
+def patch_variant(kernel: Path, patch: Path):
+    """Prefer a kernel-version specific patch (e.g. foo-6.18.patch) if present.
+
+    A sibling ``<name>-<major.minor>.skip`` marker skips the patch entirely on
+    that kernel branch (used when the change is folded into an overlay).
+    """
+    mm = kernel_mm(kernel)
+    variant = patch.with_name(f"{patch.stem}-{mm}{patch.suffix}")
+    if variant.is_file():
+        return variant
+    if patch.with_name(f"{patch.stem}-{mm}.skip").is_file():
+        return None
+    return patch
+
+
+def kernel_mm(kernel: Path) -> str:
+    kv = kernel_release_base(kernel)
+    return ".".join(kv.split(".")[:2])
+
+
 def cmd_apply(args) -> None:
     lock = load_lock()
     modules = discover(lock)
@@ -227,7 +252,11 @@ def cmd_apply(args) -> None:
             die(f"kernel HEAD {head[:12]} is not base {lock['kernel']['base'][:12]}")
     for mod in order:
         for rel in mod.patches:
-            apply_patch(kernel, mod.path / rel)
+            variant = patch_variant(kernel, mod.path / rel)
+            if variant is None:
+                log(f"patch skipped on this kernel: {rel}")
+                continue
+            apply_patch(kernel, variant)
         if mod.overlay:
             overlay_copy(mod.path / mod.overlay, kernel)
     log(f"apply complete for product {product['name']}: {', '.join(m.name for m in order)}")
@@ -257,9 +286,14 @@ def cmd_compose(args) -> None:
         "",
         '#include "sm8150-xiaomi-nabu.dts"',
     ]
+    mm = kernel_mm(kernel)
     for mod in order:
         for rel in mod.dtsi:
-            lines.append(f'#include "{Path(rel).name}"')
+            name = Path(rel).name
+            variant = f"{name[:-len('.dtsi')]}-{mm}.dtsi"
+            if (dts_dir / variant).is_file():
+                name = variant
+            lines.append(f'#include "{name}"')
     lines.append("")
     (dts_dir / dts_file).write_text("\n".join(lines))
     log(f"composed {dts_file} from {', '.join(m.name for m in order)}")
@@ -284,11 +318,23 @@ def cmd_config(args) -> None:
     order = resolve(modules, product["modules"])
     kernel = kernel_path(lock)
     OUT_DIR.mkdir(parents=True, exist_ok=True)
+    config = OUT_DIR / ".config"
 
-    base = MAIN_DIR / "config" / "base.config"
-    if not base.is_file():
-        die(f"missing base config: {base}")
-    text = base.read_text()
+    # Build the base configuration from the kernel branch itself (defconfig +
+    # arch/arm64/configs/sm8150.config), so symbol renames between branches are
+    # handled by the branch that owns them.
+    kernel_frags = list(product.get("kernel_config", KERNEL_CONFIG_FRAGMENTS))
+    kernel_frag_paths = [kernel / rel for rel in kernel_frags]
+    missing = [str(p) for p in kernel_frag_paths if not p.is_file()]
+    if missing:
+        die("missing kernel config fragments: " + ", ".join(missing))
+
+    run(["make", "-C", kernel, f"O={OUT_DIR}", f"ARCH={ARCH}",
+         f"CROSS_COMPILE={CROSS_COMPILE}", "LOCALVERSION=", "defconfig"])
+    run(["scripts/kconfig/merge_config.sh", "-m", "-O", str(OUT_DIR),
+         str(config), *[str(p) for p in kernel_frag_paths]], cwd=kernel)
+
+    text = config.read_text()
     text = re.sub(r"^CONFIG_LOCALVERSION=.*\n", "", text, flags=re.M)
     text = re.sub(r"^# CONFIG_LOCALVERSION is not set\n", "", text, flags=re.M)
     text = re.sub(r"^CONFIG_LOCALVERSION_AUTO=.*\n", "", text, flags=re.M)
@@ -300,7 +346,7 @@ def cmd_config(args) -> None:
         f'\nCONFIG_LOCALVERSION="{localversion}"\n'
         "# CONFIG_LOCALVERSION_AUTO is not set\n"
     )
-    (OUT_DIR / ".config").write_text(text)
+    config.write_text(text)
 
     fragments = [str(MAIN_DIR / rel) for rel in product.get("config", [])]
     for mod in order:
@@ -310,7 +356,7 @@ def cmd_config(args) -> None:
         die("missing config fragments: " + ", ".join(missing))
     if fragments:
         run(["scripts/kconfig/merge_config.sh", "-m", "-O", str(OUT_DIR),
-             str(OUT_DIR / ".config"), *fragments], cwd=kernel)
+             str(config), *fragments], cwd=kernel)
     run(["make", "-C", kernel, f"O={OUT_DIR}", f"ARCH={ARCH}",
          f"CROSS_COMPILE={CROSS_COMPILE}", "LOCALVERSION=", "olddefconfig"])
     run(["make", "-C", kernel, f"O={OUT_DIR}", f"ARCH={ARCH}",
