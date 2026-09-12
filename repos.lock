@@ -18,7 +18,7 @@ nabu-power         = "nabu-power"
 
 [commits]
 nabu-iris          = "e14d97089f512f35b4e56ae2f5974422292f1a8c"
-nabu-camera        = "f3f075a1e38c1cb80ca0a2f21e7b212f8508f95a"
+nabu-camera        = "40a5620b43465bdce731692d3ad79538ac058625"
 nabu-audio         = "656fd3bb66feb95e72164c8b3edb3b05de1389f1"
-nabu-accelerometer = "3ecbfbc461f3ee5517bd012630ab59f557264f31"
-nabu-power         = "7ab97ec97e1609fd595b26c9b3c00d2f8866a6d8"
+nabu-accelerometer = "3e59d7ddd527772a64d9c17436a2aa20560cae08"
+nabu-power         = "08e2746580f5ee47408cf3e2bbd980051306d276"
