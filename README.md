@@ -1,68 +1,71 @@
 # nabu-main
 
-小米平板 5（nabu）Linux 内核的**统一构建 / 打包 / 安装**流水线。
+**English** | [中文](README.zh.md)
 
-main 自身不包含任何模块知识：它只读取各子仓根目录的 `nabu-module.toml`（契约），
-据此完成叠加、配置合并、DTS 组合、编译、收集、打包 UKI、安装与回滚。
-内核与所有模块都放在本目录的父目录中，通过 `repos.lock` 固定基线与 commit。
+The unified **build / package / install** pipeline for the Xiaomi Pad 5 (nabu) Linux kernel.
 
-> 设计与动机见上一级的 [`nabu-main-design.md`](../nabu-main-design.md)。
+`main` itself contains no module knowledge: it only reads the `nabu-module.toml` contract in each
+sub-repository's root and uses it to perform overlay application, config merging, DTS composition,
+compilation, collection, UKI packaging, installation, and rollback. The kernel and all modules live
+in the parent directory of this directory, and `repos.lock` pins the baseline and commits.
 
-## 快速开始
+> See [`nabu-main-design.md`](../nabu-main-design.md) one level up for the design and rationale.
+
+## Quick start
 
 ```sh
-# 需要 arm64 交叉工具链（默认 aarch64-linux-gnu-）与 python3.11+
+# Requires an arm64 cross toolchain (default aarch64-linux-gnu-) and python3.11+
 make                     # apply → compose → config → build → collect → package → verify
-sudo make install        # 安装完整模块树 + UKI，并新建 UEFI 启动项
-sudo make rollback       # 回滚到安装前状态
+sudo make install        # install the full module tree + UKI and create a UEFI boot entry
+sudo make rollback       # roll back to the pre-install state
 ```
 
-常用目标：
+Common targets:
 
-| 目标 | 说明 |
+| Target | Description |
 |---|---|
-| `make apply` | 重置内核到基线并叠加各模块 overlay/patch |
-| `make compose` | 由产品模块顺序生成组合 DTS，并注册到 `qcom/Makefile` |
-| `make config` | 生成 `.config` 并合并内核/产品/模块配置片段 |
-| `make build` | 编译 `Image`、模块、DTB，并执行模块 build hook |
-| `make collect` | 按 `artifacts` 声明收集产物到 `artifacts/<product>/` |
-| `make package` | 用 `ukify` 打包 UKI（Image + DTB + cmdline） |
-| `make verify` | 校验各 `.ko` 的 vermagic 与 UKI 内容 |
-| `make install` | 安装完整模块树、模块/用户态文件与 UKI |
-| `make install-modules` | 只装模块与用户态，不动 ESP / 启动项 |
-| `make rollback` | 按安装清单逆序恢复 |
-| `make clean` / `distclean` | 删除 `out/` / 同时删除 `artifacts/` |
+| `make apply` | Reset the kernel to the baseline and apply each module's overlay/patch |
+| `make compose` | Generate the combined DTS from the product module order and register it in `qcom/Makefile` |
+| `make config` | Generate `.config` and merge the kernel/product/module config fragments |
+| `make build` | Build `Image`, modules, and DTB, and run module build hooks |
+| `make collect` | Collect artifacts into `artifacts/<product>/` per the `artifacts` declarations |
+| `make package` | Package the UKI (Image + DTB + cmdline) with `ukify` |
+| `make verify` | Verify the vermagic of each `.ko` and the UKI contents |
+| `make install` | Install the full module tree, module/userspace files, and the UKI |
+| `make install-modules` | Install only modules and userspace, without touching the ESP / boot entries |
+| `make rollback` | Restore in reverse order per the install manifest |
+| `make clean` / `distclean` | Delete `out/` / also delete `artifacts/` |
 
-切换产品：`make PRODUCT=audio-only ...`。
+Switch product: `make PRODUCT=audio-only ...`.
 
-## 目录结构
+## Directory layout
 
 ```
 nabu-main/
-├── Makefile              # 入口，逻辑全部在 scripts/nabu
-├── repos.lock            # 内核路径/基线 commit + 各模块路径/commit
-├── products/             # 产品定义（production.toml / audio-only.toml）
-├── config/               # production.cmdline、uki.sbat
+├── Makefile              # entry point; all logic lives in scripts/nabu
+├── repos.lock            # kernel path/baseline commit + module paths/commits
+├── products/             # product definitions (production.toml / audio-only.toml)
+├── config/               # production.cmdline, uki.sbat
 ├── scripts/
-│   ├── nabu              # Python 流水线（discover/apply/compose/...）
-│   └── install-uki.sh    # 产品级 UKI 安装/rollback
-├── out/                  # 唯一内核 O=（git 忽略）
-└── artifacts/<product>/  # 收集产物 + install-manifest.tsv（git 忽略）
+│   ├── nabu              # Python pipeline (discover/apply/compose/...)
+│   └── install-uki.sh    # product-level UKI install/rollback
+├── out/                  # the single kernel O= (git-ignored)
+└── artifacts/<product>/  # collected artifacts + install-manifest.tsv (git-ignored)
 ```
 
-各子仓（与 `repos.lock` 同级的 `nabu-*`）根目录放一个 `nabu-module.toml`。
+Each sub-repository (the `nabu-*` siblings of `repos.lock`) has a `nabu-module.toml` in its root.
 
-## 环境依赖
+## Environment requirements
 
-- `python3` ≥ 3.11（使用标准库 `tomllib`）
-- arm64 交叉工具链，可用 `NABU_CROSS_COMPILE` 覆盖（默认 `aarch64-linux-gnu-`）
-- 打包/安装：`ukify`（`/usr/bin/ukify`）、`efibootmgr`（缺失时自动安装）
-- 可选环境变量：`NABU_JOBS`（并行度）、`NABU_UKI_STUB`（自定义 UKI stub）、
-  `INSTALL_MOD_PATH`（安装根，默认 `/`）
+- `python3` ≥ 3.11 (uses the standard library `tomllib`)
+- arm64 cross toolchain, overridable with `NABU_CROSS_COMPILE` (default `aarch64-linux-gnu-`)
+- Packaging/install: `ukify` (`/usr/bin/ukify`), `efibootmgr` (auto-installed when missing)
+- Optional environment variables: `NABU_JOBS` (parallelism), `NABU_UKI_STUB` (custom UKI stub),
+  `INSTALL_MOD_PATH` (install root, default `/`)
 
-## 模块契约：`nabu-module.toml`
+## Module contract: `nabu-module.toml`
 
-每个模块通过契约回答四个问题，main 全程不出现模块名字面量。
+Each module answers four questions through the contract; `main` never contains a module name literal.
 
 ```toml
 schema = 1
@@ -70,10 +73,10 @@ schema = 1
 [module]
 name        = "nabu-iris"
 description = "..."
-requires    = []                       # 依赖模块，决定拓扑序
+requires    = []                       # dependency modules; determines topological order
 
 [provides]
-overlay      = "kernel-overlay"        # 整体复制进内核树
+overlay      = "kernel-overlay"        # copied wholesale into the kernel tree
 patches      = ["patches/0001-....patch"]
 dtsi         = ["arch/arm64/boot/dts/qcom/sm8150-xiaomi-nabu-iris.dtsi"]
 config       = ["config/nabu-iris.config"]
@@ -85,81 +88,87 @@ rules        = ["config/90-nabu-ssc-accelerometer.rules"]
 
 [build]
 kernel_targets = ["drivers/media/platform/qcom/iris/qcom-iris.ko"]
-# hook = "scripts/nabu-build.sh"        # 特殊构建（out-of-tree / 用户态）
+# hook = "scripts/nabu-build.sh"        # special builds (out-of-tree / userspace)
 
 [hooks]
-# install = "scripts/nabu-install.sh"  # 复杂安装事务
+# install = "scripts/nabu-install.sh"  # complex install transactions
 
-[artifacts]                            # 对外名 → "out:<内核内路径>" | "module:<本仓路径>"
+[artifacts]                            # public name → "out:<path in kernel>" | "module:<path in repo>"
 "qcom-iris.ko" = "out:drivers/media/platform/qcom/iris/qcom-iris.ko"
 
-[install]                              # artifacts/模块文件 → 目标路径，@release@ 展开
+[install]                              # artifacts/module files → target paths, @release@ expanded
 "qcom-iris.ko" = "/lib/modules/@release@/kernel/drivers/media/platform/qcom/iris/qcom-iris.ko"
 ```
 
-- `requires` 保证拓扑序；同层按名字稳定排序，结果可复现。
-- `artifacts` 前缀区分来源，main 无需了解模块内部布局。
-- `install` 是纯路径映射；需要备份/事务时用 `[hooks].install`。
-- 未声明的文件 main 不会碰。
-- 支持按内核版本选择变体：`foo-6.18.patch` / `foo-6.18.dtsi` 优先，
-  `foo-6.18.skip` 表示该分支跳过（逻辑已并入 overlay）。
+- `requires` guarantees topological order; peers at the same level are sorted stably by name, so
+  results are reproducible.
+- The `artifacts` prefix distinguishes the source; `main` doesn't need to know a module's internal
+  layout.
+- `install` is a pure path mapping; use `[hooks].install` when backup/transactions are needed.
+- `main` never touches files that aren't declared.
+- Kernel-version-specific variants are supported: `foo-6.18.patch` / `foo-6.18.dtsi` take
+  precedence, and `foo-6.18.skip` means that branch is skipped (the logic has already been merged
+  into the overlay).
 
-### hook 协议
+### Hook protocol
 
-build/install hook 通过固定环境变量调用：
+Build/install hooks are invoked with fixed environment variables:
 
 ```
 NABU_KERNEL_TREE  NABU_OUT  NABU_RELEASE  NABU_ARCH
 NABU_CROSS_COMPILE  NABU_JOBS  NABU_MODULE_DIR  NABU_ARTIFACTS
 ```
 
-hook 只负责产出本模块声明的产物，不得改动其它模块或全局状态。
+A hook is only responsible for producing the artifacts declared by its own module and must not
+modify other modules or global state.
 
-## 产品定义：`products/*.toml`
+## Product definition: `products/*.toml`
 
 ```toml
 [product]
 name    = "production"
 modules = ["nabu-iris", "nabu-camera", "nabu-audio", "nabu-accelerometer", "nabu-power"]
-release = "6.14.11-nabu1"        # 所有模块共用，保证 vermagic 一致
+release = "6.14.11-nabu1"        # shared by all modules to keep vermagic consistent
 image   = true
 dtb     = "sm8150-xiaomi-nabu-production.dtb"
 cmdline = "config/production.cmdline"
 sbat    = "config/uki.sbat"
 uki     = "nabu-production.efi"
-# kernel_config = [...]           # 覆盖默认内核配置片段（可选）
+# kernel_config = [...]           # override the default kernel config fragments (optional)
 
-[install]                          # 产品级 UKI 安装
+[install]                          # product-level UKI install
 esp        = "/dev/disk/by-partlabel/esp"
 esp_mount  = "/boot/efi"
 uki_target = "EFI/ubuntu/6.14.11-nabu1-build1.efi"
 boot_label = "nabu-6.14.11-nabu1"
 ```
 
-- `modules` 的顺序即组合 DTS 的 `#include` 顺序。
-- `audio-only.toml` 为迭代用产品，复用同一 `out/`。
+- The order of `modules` is the `#include` order of the combined DTS.
+- `audio-only.toml` is a product for iteration and reuses the same `out/`.
 
-## 流水线
+## Pipeline
 
 ```text
-discover  读 repos.lock → 解析各仓 nabu-module.toml
-select    按 product 选取模块（顺序决定 DTS 与布局）
-apply     reset 内核到基线 → 逐模块 git apply patch → 复制 overlay
-compose   生成组合 DTS 并注册进 qcom/Makefile
-config    defconfig + 内核片段 → 合并产品/模块 config → olddefconfig
-build     编译 Image/模块/DTB，调用模块 build hook
-collect   按 artifacts 收集到 artifacts/<product>/
-package   ukify 打包 UKI
-verify    校验 .ko vermagic 与 UKI 内容（release、cmdline）
-install   安装完整模块树 + 各模块 install 映射 + UKI，写安装清单
-rollback  按清单逆序恢复文件与模块树，撤销 UKI 启动项
+discover  read repos.lock → parse each repo's nabu-module.toml
+select    select modules by product (order determines DTS and layout)
+apply     reset kernel to baseline → git apply each module's patch → copy overlay
+compose   generate the combined DTS and register it in qcom/Makefile
+config    defconfig + kernel fragments → merge product/module config → olddefconfig
+build     build Image/modules/DTB, invoke module build hooks
+collect   collect into artifacts/<product>/ per artifacts
+package   package the UKI with ukify
+verify    verify .ko vermagic and UKI contents (release, cmdline)
+install   install the full module tree + each module's install mappings + UKI, write the install manifest
+rollback  restore files and the module tree in reverse order per the manifest, remove the UKI boot entry
 ```
 
-## 安装与回滚
+## Install and rollback
 
-- `install` 需要 root；它会先执行 `modules_install` 安装**完整** `/lib/modules/<release>`，
-  再按声明的 `install` 映射安装/覆盖，并写入 `artifacts/<product>/install-manifest.tsv`。
-- 覆盖已有文件时先备份为 `*.nabu-backup`；回滚时恢复或删除。
-- UKI 安装到 ESP 新文件并创建独立 UEFI 启动项，旧启动项保留作后备；
-  状态记录在 `/var/lib/nabu-main/uki-state.env`。
-- 建议流程：普通用户 `make`，然后 `sudo make install`。
+- `install` requires root; it first runs `modules_install` to install the **complete**
+  `/lib/modules/<release>`, then installs/overwrites per the declared `install` mappings and writes
+  `artifacts/<product>/install-manifest.tsv`.
+- When overwriting existing files, they are first backed up as `*.nabu-backup`; rollback restores or
+  deletes them.
+- The UKI is installed to a new file on the ESP and a separate UEFI boot entry is created; the old
+  boot entry is kept as a fallback. State is recorded in `/var/lib/nabu-main/uki-state.env`.
+- Recommended flow: `make` as a normal user, then `sudo make install`.
