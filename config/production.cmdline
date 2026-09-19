@@ -1,1 +1,1 @@
-root=PARTLABEL=linux rw fw_devlink=permissive modprobe.blacklist=venus_core module_blacklist=venus_core
+root=PARTLABEL=linux rw fw_devlink=permissive modprobe.blacklist=venus_core module_blacklist=venus_core console=tty0 ignore_loglevel
