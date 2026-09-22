@@ -46,8 +46,6 @@ nabu-main/
 ├── repos.lock            # kernel path/baseline commit + module paths/commits
 ├── products/             # product definitions (production.toml / audio-only.toml)
 ├── config/               # production.cmdline, uki.sbat
-├── systemd/              # optional product units (nabu-usb-console.service, manual)
-├── libexec/              # optional product helpers (nabu-usb-console.sh, manual)
 ├── scripts/
 │   ├── nabu              # Python pipeline (discover/apply/compose/...)
 │   └── install-uki.sh    # product-level UKI install/rollback
@@ -148,32 +146,17 @@ boot_label = "nabu-6.14.11-nabu1"
 - The order of `modules` is the `#include` order of the combined DTS.
 - `audio-only.toml` is a product for iteration and reuses the same `out/`.
 
-## USB recovery console (manual, off by default)
+## USB recovery console (not used)
 
-`libexec/nabu-usb-console.sh` and `systemd/nabu-usb-console.service` expose a CDC-ACM gadget
-(`nabu-console`, id `1d6b:0104`) that can carry the kernel console on USB-C. They are **not**
-installed or enabled by the pipeline: doing that previously added `console=ttyGS0` to the cmdline
-and wedged early boot when nothing was attached to USB-C.
+A CDC-ACM kernel console on USB-C was prototyped but is **not part of the product**. It never
+completed a real end-to-end capture here: the gadget has to claim USB-C in device mode, and this
+tablet keeps the port in host mode with an attached HID, so the port never enumerated on a host.
+It also risks early-boot hangs, because a cmdline `console=ttyGS0` only becomes a console once the
+gadget is registered, and registering it needs an attached host.
 
-To use it, do it by hand:
-
-```sh
-sudo install -m 0755 libexec/nabu-usb-console.sh /usr/local/lib/nabu/nabu-usb-console.sh
-sudo install -m 0644 systemd/nabu-usb-console.service /etc/systemd/system/
-sudo systemctl daemon-reload && sudo systemctl enable --now nabu-usb-console.service
-```
-
-The gadget alone only *registers* the ttyGS console; to also receive printk, add `console=ttyGS0`
-**after** the existing `console=tty0` in the boot cmdline (the first `console=` stays
-`/dev/console`) and reboot. Remove it again when finished. A host then sees the log on
-`/dev/ttyACM0`:
-
-```sh
-picocom -b 115200 /dev/ttyACM0
-```
-
-Charging is unaffected (the port stays a power sink), but the gadget holds USB-C in device mode, so
-OTG host accessories are unavailable while it is bound.
+If it is ever revisited, the requirements are: force the Type-C role so the gadget can bind, add
+`console=ttyGS0` *after* `console=tty0` on the cmdline, and keep `tty0` as the console device. No
+files for it remain in this repository.
 
 ## Pipeline
 
