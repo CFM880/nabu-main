@@ -538,6 +538,13 @@ def install_module_tree(product: dict, artifact_dir: Path) -> None:
     release = product["release"]
     install_root = Path(os.environ.get("INSTALL_MOD_PATH", "/"))
     mod_root = install_root / "lib" / "modules" / release
+    # modules_install installs whatever release the kernel output dir was
+    # configured for, so refuse to install a tree that does not match the
+    # product (e.g. NABU_OUT pointing at another branch's build).
+    actual = run_capture(["make", "-s", "-C", kernel, f"O={OUT_DIR}",
+                          f"ARCH={ARCH}", "LOCALVERSION=", "kernelrelease"])
+    if actual != release:
+        die(f"out dir {OUT_DIR} is configured for {actual!r}, expected {release!r}")
     existed = mod_root.exists()
     run(make_base(kernel) + [f"INSTALL_MOD_PATH={install_root}", "modules_install"])
     (artifact_dir / "module-tree.txt").write_text(f"{mod_root}\t{existed}\n")
