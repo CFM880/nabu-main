@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-only
 # nabu-main entry point.  All orchestration logic lives in scripts/nabu; this
 # Makefile only forwards the product and the pipeline stage.
-PRODUCT ?= production
+PRODUCT ?= production-7.2
 NABU    := ./scripts/nabu
 
 .PHONY: all discover apply compose config build collect package verify install install-modules rollback clean distclean
