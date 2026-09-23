@@ -10,6 +10,9 @@ path = "linux-6.14"
 base = "5181e1358ddd6ea8028e841d928942373e6aebc8"
 
 [modules]
+nabu-platform      = "nabu-platform"
+nabu-display       = "nabu-display"
+nabu-touchscreen   = "nabu-touchscreen"
 nabu-iris          = "nabu-iris"
 nabu-camera        = "nabu-camera"
 nabu-audio         = "nabu-audio"
@@ -17,8 +20,11 @@ nabu-accelerometer = "nabu-accelerometer"
 nabu-power         = "nabu-power"
 
 [commits]
+nabu-platform      = "03bf5bd05233c2c05ae2107c6c1c43df2fde61e8"
+nabu-display       = "1856181a747ce0bc5f5e5bd777523b0b3821f859"
+nabu-touchscreen   = "0235e3224c83caacde9fe006ca62f13b4007e000"
 nabu-iris          = "ccaeb5dc6e38ca1a2c28b1616f4c265b635d3d66"
 nabu-camera        = "f482fa88a7ecace020b0a996aaa85e6fb2e12b8e"
-nabu-audio         = "2e2d4e696e2f4a1e51a2abc2df897fea4487690a"
+nabu-audio         = "85f79378559ff84b351a5f3ece037c605422d5e6"
 nabu-accelerometer = "8559f9e52615105c9902f617fe29a9b449b855e3"
-nabu-power         = "b29a32f4aa93bb5c045ef20263539d08f66bdc8e"
+nabu-power         = "54ba17c296cfb75fba38030f3e6a63a92b2e9c0e"

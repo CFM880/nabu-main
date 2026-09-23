@@ -31,7 +31,7 @@ JOBS = os.environ.get("NABU_JOBS", str(os.cpu_count() or 1))
 # Base configuration comes from the kernel branch itself: defconfig plus these
 # fragments (relative to the kernel tree).  Products may override via
 # [product] kernel_config = [...].
-KERNEL_CONFIG_FRAGMENTS = ["arch/arm64/configs/sm8150.config"]
+KERNEL_CONFIG_FRAGMENTS = ["config/sm8150.config"]
 
 
 def log(msg: str) -> None:
@@ -321,10 +321,17 @@ def cmd_config(args) -> None:
     config = OUT_DIR / ".config"
 
     # Build the base configuration from the kernel branch itself (defconfig +
-    # arch/arm64/configs/sm8150.config), so symbol renames between branches are
-    # handled by the branch that owns them.
+    # sm8150.config), so symbol renames between branches are handled by the
+    # branch that owns them.  A fragment path is resolved against the kernel
+    # tree first, then against nabu-main (which owns config/sm8150.config so the
+    # kernel tree is not the only copy).
     kernel_frags = list(product.get("kernel_config", KERNEL_CONFIG_FRAGMENTS))
-    kernel_frag_paths = [kernel / rel for rel in kernel_frags]
+    kernel_frag_paths = []
+    for rel in kernel_frags:
+        candidate = kernel / rel
+        if not candidate.is_file():
+            candidate = MAIN_DIR / rel
+        kernel_frag_paths.append(candidate)
     missing = [str(p) for p in kernel_frag_paths if not p.is_file()]
     if missing:
         die("missing kernel config fragments: " + ", ".join(missing))

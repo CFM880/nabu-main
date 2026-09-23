@@ -45,7 +45,7 @@ nabu-main/
 ├── Makefile              # entry point; all logic lives in scripts/nabu
 ├── repos.lock            # kernel path/baseline commit + module paths/commits
 ├── products/             # product definitions (production.toml / audio-only.toml)
-├── config/               # production.cmdline, uki.sbat
+├── config/               # production.cmdline, sm8150.config, uki.sbat
 ├── scripts/
 │   ├── nabu              # Python pipeline (discover/apply/compose/...)
 │   └── install-uki.sh    # product-level UKI install/rollback
@@ -127,7 +127,7 @@ modify other modules or global state.
 ```toml
 [product]
 name    = "production"
-modules = ["nabu-iris", "nabu-camera", "nabu-audio", "nabu-accelerometer", "nabu-power"]
+modules = ["nabu-platform", "nabu-display", "nabu-touchscreen", "nabu-iris", "nabu-camera", "nabu-audio", "nabu-accelerometer", "nabu-power"]
 release = "6.14.11-nabu1"        # shared by all modules to keep vermagic consistent
 image   = true
 dtb     = "sm8150-xiaomi-nabu-production.dtb"
