@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# Production product on the Linux 7.2.7 branch: every nabu module compiled
+# into one kernel output and one unified release, packaged as a single UKI
+# (Image + composed DTB + cmdline).
+#
+# The 7.2.7 port currently lives in the linux-7.2 tree itself, so build this
+# product with `compose config build collect package verify` (no `apply`).
+[product]
+name    = "production-7.2"
+modules = ["nabu-platform", "nabu-display", "nabu-touchscreen", "nabu-iris", "nabu-camera", "nabu-audio", "nabu-accelerometer", "nabu-power"]
+release = "7.2.7-nabu-full"
+image   = true
+dtb     = "sm8150-xiaomi-nabu-production-7.2.dtb"
+cmdline = "config/production.cmdline"
+sbat    = "config/uki.sbat"
+uki     = "nabu-production-7.2.efi"
+
+# Product-level UKI install: a new ESP file plus its own UEFI boot entry.  The
+# previously booted entry is kept untouched as a fallback.
+[install]
+esp        = "/dev/disk/by-partlabel/esp"
+esp_mount  = "/boot/efi"
+uki_target = "EFI/ubuntu/7.2.7-nabu-full-build1.efi"
+boot_label = "nabu-7.2.7-nabu-full"

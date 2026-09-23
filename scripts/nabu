@@ -21,7 +21,9 @@ from pathlib import Path
 MAIN_DIR = Path(__file__).resolve().parent.parent
 ROOT = MAIN_DIR.parent
 LOCK_PATH = MAIN_DIR / "repos.lock"
-OUT_DIR = MAIN_DIR / "out"
+# The kernel output directory defaults to out/ but can be redirected with
+# NABU_OUT so several kernel branches can be built side by side.
+OUT_DIR = Path(os.environ.get("NABU_OUT") or (MAIN_DIR / "out"))
 ARTIFACTS_BASE = MAIN_DIR / "artifacts"
 
 ARCH = "arm64"
