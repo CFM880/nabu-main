@@ -128,7 +128,7 @@ modify other modules or global state.
 [product]
 name    = "production"
 modules = ["nabu-platform", "nabu-display", "nabu-touchscreen", "nabu-iris", "nabu-camera", "nabu-audio", "nabu-accelerometer", "nabu-power"]
-release = "6.14.11-nabu1"        # shared by all modules to keep vermagic consistent
+release = "6.14.11-nabu-full"        # shared by all modules to keep vermagic consistent
 image   = true
 dtb     = "sm8150-xiaomi-nabu-production.dtb"
 cmdline = "config/production.cmdline"
@@ -139,8 +139,8 @@ uki     = "nabu-production.efi"
 [install]                          # product-level UKI install
 esp        = "/dev/disk/by-partlabel/esp"
 esp_mount  = "/boot/efi"
-uki_target = "EFI/ubuntu/6.14.11-nabu1-build1.efi"
-boot_label = "nabu-6.14.11-nabu1"
+uki_target = "EFI/ubuntu/6.14.11-nabu-full-build1.efi"
+boot_label = "nabu-6.14.11-nabu-full"
 ```
 
 - The order of `modules` is the `#include` order of the combined DTS.

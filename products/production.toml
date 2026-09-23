@@ -4,7 +4,7 @@
 [product]
 name    = "production"
 modules = ["nabu-platform", "nabu-display", "nabu-touchscreen", "nabu-iris", "nabu-camera", "nabu-audio", "nabu-accelerometer", "nabu-power"]
-release = "6.14.11-nabu1"
+release = "6.14.11-nabu-full"
 image   = true
 dtb     = "sm8150-xiaomi-nabu-production.dtb"
 cmdline = "config/production.cmdline"
@@ -16,5 +16,5 @@ uki     = "nabu-production.efi"
 [install]
 esp        = "/dev/disk/by-partlabel/esp"
 esp_mount  = "/boot/efi"
-uki_target = "EFI/ubuntu/6.14.11-nabu1-build1.efi"
-boot_label = "nabu-6.14.11-nabu1"
+uki_target = "EFI/ubuntu/6.14.11-nabu-full-build1.efi"
+boot_label = "nabu-6.14.11-nabu-full"
