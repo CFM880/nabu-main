@@ -21,9 +21,9 @@ from pathlib import Path
 MAIN_DIR = Path(__file__).resolve().parent.parent
 ROOT = MAIN_DIR.parent
 LOCK_PATH = MAIN_DIR / "repos.lock"
-# The kernel output directory defaults to out/ but can be redirected with
-# NABU_OUT so several kernel branches can be built side by side.
-OUT_DIR = Path(os.environ.get("NABU_OUT") or (MAIN_DIR / "out"))
+# This branch builds Linux 7.2.7 next to the 6.14 build in out/, so default to
+# out-7.2; NABU_OUT still overrides it.
+OUT_DIR = Path(os.environ.get("NABU_OUT") or (MAIN_DIR / "out-7.2"))
 ARTIFACTS_BASE = MAIN_DIR / "artifacts"
 
 ARCH = "arm64"
@@ -242,6 +242,11 @@ def kernel_mm(kernel: Path) -> str:
 
 def cmd_apply(args) -> None:
     lock = load_lock()
+    # On branches where the port is carried by the kernel tree itself there is
+    # nothing to apply, and resetting would discard that port.
+    if lock["kernel"].get("apply", True) is False:
+        log("apply disabled for this branch: the port lives in the kernel tree")
+        return
     modules = discover(lock)
     product = load_product(args.product)
     order = resolve(modules, product["modules"])

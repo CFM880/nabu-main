@@ -8,11 +8,12 @@ schema = 1
 [kernel]
 # Linux 7.2.7 port.  Unlike the 6.14 branch the 7.2 port is not (yet) expressed
 # as module overlays: it lives directly in the linux-7.2 worktree and is pinned
-# here as the base commit.  Do not run `apply` on this branch - it would copy
-# the 6.14 module overlays over the 7.2 tree.  Use the stages
-# `compose config build collect package verify` instead.
+# here as the base commit.  apply is therefore disabled (it would reset the
+# port away and copy the 6.14 overlays over the 7.2 tree); the pipeline stages
+# compose/config/build/collect/package/verify run as usual.
 path = "linux-7.2"
-base = "7c2c95a1922d639952cceb109b4c4f01fe31daeb"
+base = "e490383191ba"
+apply = false
 
 [modules]
 nabu-platform      = "nabu-platform"
