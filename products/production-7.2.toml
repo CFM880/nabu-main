@@ -11,7 +11,7 @@ modules = ["nabu-platform", "nabu-display", "nabu-touchscreen", "nabu-iris", "na
 release = "7.2.7-nabu-full"
 image   = true
 dtb     = "sm8150-xiaomi-nabu-production-7.2.dtb"
-cmdline = "config/production.cmdline"
+cmdline = "config/production-7.2.cmdline"
 sbat    = "config/uki.sbat"
 uki     = "nabu-production-7.2.efi"
 
