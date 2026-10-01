@@ -3,6 +3,10 @@
 # The kernel and every module are checked out next to this file.  nabu-main
 # never embeds module knowledge beyond these paths; the module contract lives
 # in each repository's nabu-module.toml.
+#
+# `repo` is the upstream a checkout is fetched from (used by `make bootstrap`);
+# `path` is where it is placed next to this file.  The history is pinned by the
+# commit, so a fetched tree is reproducible even if the branch moves on.
 schema = 1
 
 [kernel]
@@ -12,7 +16,9 @@ schema = 1
 # The whole port therefore lives in the module repositories; the linux-7.2
 # worktree under path is only the build tree.
 path = "linux-7.2"
+repo = "https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git"
 base = "f42acb3678424d1e08f6ed27c0d8ba8a125e14d6"
+tag  = "v7.2.7"
 apply = true
 
 [modules]
@@ -24,6 +30,17 @@ nabu-camera        = "nabu-camera"
 nabu-audio         = "nabu-audio"
 nabu-accelerometer = "nabu-accelerometer"
 nabu-power         = "nabu-power"
+
+[repos]
+# module name -> git URL to bootstrap from
+nabu-platform      = "https://github.com/CFM880/nabu-platform.git"
+nabu-display       = "https://github.com/CFM880/nabu-display.git"
+nabu-touchscreen   = "https://github.com/CFM880/nabu-touchscreen.git"
+nabu-iris          = "https://github.com/CFM880/nabu-iris.git"
+nabu-camera        = "https://github.com/CFM880/nabu-camera.git"
+nabu-audio         = "https://github.com/CFM880/nabu-audio.git"
+nabu-accelerometer = "https://github.com/CFM880/nabu-accelerometer.git"
+nabu-power         = "https://github.com/CFM880/nabu-power.git"
 
 [commits]
 # Module commits as pushed to the `7.2.7` branch of each repository, so the

@@ -8,16 +8,20 @@ main 自身不包含任何模块知识：它只读取各子仓根目录的 `nabu
 据此完成叠加、配置合并、DTS 组合、编译、收集、打包 UKI、安装与回滚。
 内核与所有模块都放在本目录的父目录中，通过 `repos.lock` 固定上游 base 与 commit。
 
-内核 `base` 是**干净上游** `b9d5d463`（Linux 6.14.11），而不是中间的 `5181e135`
-（NABU 基线）。中间那 60 个提交的 port 全部由各模块 overlay 承载，因此 `apply`
-会重置到上游并重建完整 nabu 状态（含之后所有修复），不依赖那个中间节点。
+内核 `base` 是**干净上游**提交，且每个产品各自钉一个：6.14.11 产品构建上游 `b9d5d463`，
+7.2.7 产品构建上游 tag `v7.2.7`（`f42acb367842`）。整个 nabu port 由各模块 overlay 承载，
+因此 `apply` 会重置到该 base 并重放完整 nabu 状态（含之后所有修复），不依赖任何中间 port 提交。
 
-> 设计与动机见上一级的 [`nabu-main-design.md`](../nabu-main-design.md)。
+> 构建/移植文档与工具位于配套仓库
+> [`nabu-linux-overlay`](https://github.com/CFM880/nabu-linux-overlay)
+> （`docs/nabu-main-design.md`、`docs/port-7.2.7.md`、`docs/KNOWN-ISSUES.md`、`tools/`）。
 
 ## 快速开始
 
 ```sh
-# 需要 arm64 交叉工具链（默认 aarch64-linux-gnu-）与 python3.11+
+# 全新检出：先按 repos.lock 拉取内核 base 与各模块，再构建。
+# 已经摆好源码树与工具链的机器，直接 make 即可。
+make bootstrap           # 拉取 repos.lock 源码，然后跑完流水线
 make                     # apply → compose → config → build → collect → package → verify
 sudo make install        # 安装完整模块树 + UKI，并新建 UEFI 启动项
 sudo make rollback       # 回滚到安装前状态
@@ -27,6 +31,7 @@ sudo make rollback       # 回滚到安装前状态
 
 | 目标 | 说明 |
 |---|---|
+| `make bootstrap` | 按 `repos.lock` 拉取内核 base 与各模块，然后跑完流水线 |
 | `make apply` | 重置内核到基线并叠加各模块 overlay/patch |
 | `make compose` | 由产品模块顺序生成组合 DTS，并注册到 `qcom/Makefile` |
 | `make config` | 生成 `.config` 并合并内核/产品/模块配置片段 |
@@ -62,9 +67,27 @@ nabu-main/
 
 - `python3` ≥ 3.11（使用标准库 `tomllib`）
 - arm64 交叉工具链，可用 `NABU_CROSS_COMPILE` 覆盖（默认 `aarch64-linux-gnu-`）
+  - 7.2.7 生产内核使用 **GCC 15** 构建（Ubuntu 25.10 上的 `aarch64-linux-gnu-gcc` 15.2.0）。
+    内核二进制对编译器版本敏感：要得到与当前一致的 `Image`/`.ko`，请用 GCC 15 复现，
+    否则即使源码相同，产物也会不同。
 - 打包/安装：`ukify`（`/usr/bin/ukify`）、`efibootmgr`（缺失时自动安装）
 - 可选环境变量：`NABU_JOBS`（并行度）、`NABU_UKI_STUB`（自定义 UKI stub）、
   `INSTALL_MOD_PATH`（安装根，默认 `/`）
+
+## 拉取源码（bootstrap）
+
+`repos.lock` 为每个仓库写明来源（`repo`）与要构建的确切提交（`base` / `[commits]`）。
+`make bootstrap` 会把缺失的仓库克隆到同级目录，并以 **detached** 方式检出钉住的提交，
+因此不受远端分支变动影响：
+
+```sh
+git clone <nabu-main>            # 只克隆本仓库
+cd nabu-main
+make bootstrap                   # 内核 base（v7.2.7）+ 8 个模块，然后跑完流水线
+```
+
+内核从上游地址按 tag `v7.2.7` 拉取；port 本身不作为内核历史保存，而是由 `apply`
+从各模块 overlay 重放，因此构建只依赖公开 base 与模块提交即可复现。
 
 ## 模块契约：`nabu-module.toml`
 

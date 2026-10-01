@@ -9,17 +9,23 @@ sub-repository's root and uses it to perform overlay application, config merging
 compilation, collection, UKI packaging, installation, and rollback. The kernel and all modules live
 in the parent directory of this directory, and `repos.lock` pins the upstream base and commits.
 
-The kernel `base` is the **clean upstream** commit `b9d5d463` (Linux 6.14.11), not the intermediate
-`5181e135` (NABU baseline). The 60-commit port in between is carried entirely by the module
-overlays, so `apply` resets to upstream and rebuilds the full nabu state — including every later
-fix — without depending on that intermediate point.
+The kernel `base` is a **clean upstream** commit, and each product pins its own: the 6.14.11
+product builds upstream `b9d5d463`, the 7.2.7 product builds the upstream tag `v7.2.7`
+(`f42acb367842`). The entire nabu port is carried by the module overlays, so `apply` resets to
+that base and replays the full nabu state — including every later fix — without depending on any
+intermediate port commit.
 
-> See [`nabu-main-design.md`](../nabu-main-design.md) one level up for the design and rationale.
+> The build/port documentation and tooling live in the companion
+> [`nabu-linux-overlay`](https://github.com/CFM880/nabu-linux-overlay) repository
+> (`docs/nabu-main-design.md`, `docs/port-7.2.7.md`, `docs/KNOWN-ISSUES.md`, `tools/`).
 
 ## Quick start
 
 ```sh
-# Requires an arm64 cross toolchain (default aarch64-linux-gnu-) and python3.11+
+# Fresh checkout: fetch the kernel base + every module at the pinned commits,
+# then build.  On a machine that already has the trees and toolchain, `make`
+# alone is enough.
+make bootstrap           # clone repos.lock sources, then run the pipeline
 make                     # apply → compose → config → build → collect → package → verify
 sudo make install        # install the full module tree + UKI and create a UEFI boot entry
 sudo make rollback       # roll back to the pre-install state
@@ -29,6 +35,7 @@ Common targets:
 
 | Target | Description |
 |---|---|
+| `make bootstrap` | Fetch the kernel base and every module at the commits in `repos.lock`, then run the pipeline |
 | `make apply` | Reset the kernel to the baseline and apply each module's overlay/patch |
 | `make compose` | Generate the combined DTS from the product module order and register it in `qcom/Makefile` |
 | `make config` | Generate `.config` and merge the kernel/product/module config fragments |
@@ -64,9 +71,28 @@ Each sub-repository (the `nabu-*` siblings of `repos.lock`) has a `nabu-module.t
 
 - `python3` ≥ 3.11 (uses the standard library `tomllib`)
 - arm64 cross toolchain, overridable with `NABU_CROSS_COMPILE` (default `aarch64-linux-gnu-`)
+  - The 7.2.7 production kernel is built with **GCC 15** (`aarch64-linux-gnu-gcc` 15.2.0 on
+    Ubuntu 25.10).  Kernel binaries are compiler-version sensitive: reproduce with GCC 15 to get
+    an equivalent `Image`/`.ko`, otherwise expect a different binary even from the same sources.
 - Packaging/install: `ukify` (`/usr/bin/ukify`), `efibootmgr` (auto-installed when missing)
 - Optional environment variables: `NABU_JOBS` (parallelism), `NABU_UKI_STUB` (custom UKI stub),
   `INSTALL_MOD_PATH` (install root, default `/`)
+
+## Bootstrapping the sources
+
+`repos.lock` names each repository (`repo`) and the exact commit to build (`base` / `[commits]`).
+`make bootstrap` clones every one that is missing into the sibling directories and checks out the
+pinned commit **detached**, so the trees are not affected by a branch that has moved on:
+
+```sh
+git clone <nabu-main>            # this repo alone
+cd nabu-main
+make bootstrap                   # kernel base (v7.2.7) + 8 modules, then the full pipeline
+```
+
+The kernel is fetched from its upstream URL at tag `v7.2.7`; the port itself is not stored as
+kernel history but replayed from the module overlays by `apply`, so the build is reproducible from
+the public base plus the module commits.
 
 ## Module contract: `nabu-module.toml`
 

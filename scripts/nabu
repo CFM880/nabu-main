@@ -269,6 +269,70 @@ def cmd_apply(args) -> None:
     log(f"apply complete for product {product['name']}: {', '.join(m.name for m in order)}")
 
 
+def git_clone(url: str, dest: Path) -> None:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    run(["git", "clone", "--filter=blob:none", url, str(dest)])
+
+
+def ensure_tree(name: str, url: str, dest: Path, commit: str) -> None:
+    """Fetch `dest` to `commit`, cloning it from `url` when it is missing."""
+    if not (dest / ".git").exists() and not (dest / ".git").is_file():
+        if dest.exists() and any(dest.iterdir()):
+            die(f"{name}: {dest} exists but is not a git checkout")
+        log(f"cloning {name} from {url}")
+        git_clone(url, dest)
+    # Make sure the pinned commit is present, then check it out detached so a
+    # shared checkout is never disturbed by a branch that moved on.
+    have = subprocess.run(["git", "-C", dest, "cat-file", "-e", f"{commit}^{{commit}}"],
+                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
+    if not have:
+        log(f"fetching {name} ({url})")
+        run(["git", "-C", dest, "fetch", "--tags", url, commit])
+    head = subprocess.run(["git", "-C", dest, "rev-parse", "HEAD"],
+                          capture_output=True, text=True).stdout.strip()
+    if head != commit:
+        log(f"checking out {name} {head[:12]} -> {commit[:12]}")
+        run(["git", "-C", dest, "checkout", "--detach", commit])
+    else:
+        log(f"{name} already at {commit[:12]}")
+
+
+def cmd_bootstrap(args) -> None:
+    """Fetch the kernel base and every module at the commits in repos.lock.
+
+    This is the step that turns `repos.lock` into a working tree from scratch:
+    run it on a fresh clone of nabu-main whose sibling directories are empty.
+    """
+    lock = load_lock()
+    kernel = lock["kernel"]
+    dest = ROOT / kernel["path"]
+    url = kernel.get("repo")
+    if not url:
+        die("kernel: repos.lock is missing the repo URL")
+    # The kernel base is an upstream tag; fetch it shallow when possible so a
+    # fresh bootstrap does not pull the full history.
+    if not (dest / ".git").exists() and not (dest / ".git").is_file():
+        if dest.exists() and any(dest.iterdir()):
+            die(f"kernel: {dest} exists but is not a git checkout")
+        tag = kernel.get("tag")
+        log(f"cloning the kernel base {tag or kernel['base'][:12]} from {url}")
+        if tag:
+            run(["git", "clone", "--filter=blob:none", "--branch", tag, url, str(dest)])
+        else:
+            git_clone(url, dest)
+    ensure_tree("kernel", url, dest, kernel["base"])
+
+    repos = lock.get("repos", {})
+    commits = lock["commits"]
+    for name, rel in lock["modules"].items():
+        if name not in repos:
+            die(f"{name}: repos.lock is missing the repo URL")
+        if name not in commits:
+            die(f"{name}: repos.lock is missing the pinned commit")
+        ensure_tree(name, repos[name], ROOT / rel, commits[name])
+    log("bootstrap complete")
+
+
 def dts_name(product: dict) -> str:
     dtb = product.get("dtb") or f"sm8150-xiaomi-nabu-{product['name']}.dtb"
     if not dtb.endswith(".dtb"):
@@ -699,7 +763,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="nabu")
     parser.add_argument("--product", "-p", default="production")
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ("discover", "apply", "compose", "config", "build",
+    for name in ("bootstrap", "discover", "apply", "compose", "config", "build",
                  "collect", "package", "install", "rollback", "verify", "all"):
         cmd = sub.add_parser(name)
         if name == "apply":
@@ -713,6 +777,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     args = build_parser().parse_args()
     handlers = {
+        "bootstrap": cmd_bootstrap,
         "apply": cmd_apply, "compose": cmd_compose, "config": cmd_config,
         "build": cmd_build, "collect": cmd_collect, "package": cmd_package,
         "install": cmd_install, "rollback": cmd_rollback, "verify": cmd_verify,
