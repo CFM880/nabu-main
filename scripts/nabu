@@ -251,7 +251,7 @@ def cmd_apply(args) -> None:
     product = load_product(args.product)
     order = resolve(modules, product["modules"])
     kernel = kernel_path(lock)
-    if not args.no_reset:
+    if not getattr(args, "no_reset", False):
         reset_kernel(kernel, lock["kernel"]["base"])
     else:
         head = run_capture(["git", "-C", kernel, "rev-parse", "HEAD"])
