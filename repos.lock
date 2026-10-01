@@ -6,14 +6,14 @@
 schema = 1
 
 [kernel]
-# Linux 7.2.7 port.  Unlike the 6.14 branch the 7.2 port is not (yet) expressed
-# as module overlays: it lives directly in the linux-7.2 worktree and is pinned
-# here as the base commit.  apply is therefore disabled (it would reset the
-# port away and copy the 6.14 overlays over the 7.2 tree); the pipeline stages
-# compose/config/build/collect/package/verify run as usual.
+# Linux 7.2.7 port, carried as module overlays exactly like the 6.14 branch.
+# The base is the clean upstream tag v7.2.7 (f42acb367842): apply resets to it
+# and replays every module overlay, and compose regenerates the product DTS.
+# The whole port therefore lives in the module repositories; the linux-7.2
+# worktree under path is only the build tree.
 path = "linux-7.2"
-base = "4d640adb5b58c8d05d484027bb313b53f9cce443"
-apply = false
+base = "f42acb3678424d1e08f6ed27c0d8ba8a125e14d6"
+apply = true
 
 [modules]
 nabu-platform      = "nabu-platform"
@@ -28,11 +28,11 @@ nabu-power         = "nabu-power"
 [commits]
 # Module commits as pushed to the `7.2.7` branch of each repository, so the
 # pinned trees are reachable on GitHub (not only in this working copy).
-nabu-platform      = "888ca5854b2659b5b15894de94b58ce62f37086b"
-nabu-display       = "bab7feeaf517acab51ff25321af5b75e24570c8c"
-nabu-touchscreen   = "f3f2fc9be9a850f1bd3f5db1c2532a481fa2396b"
-nabu-iris          = "b5d839f8dc49bbd43b05db96b58edeae6e996320"
-nabu-camera        = "8314e621bd6813920946c0462dada59d6eb67eb3"
-nabu-audio         = "8529b208c26a58b716706335d17c585685cd9142"
-nabu-accelerometer = "c80da1c7f23f42a44fb8127409ec0a228934807b"
-nabu-power         = "3d11930d08d55d2f19e042b2eb87f4f45cd83587"
+nabu-platform      = "f718cfd7b3ad4ef9a211ae4a84e479c628e59a57"
+nabu-display       = "8155b0314e851d0b51d1901e7331b60551a14c1d"
+nabu-touchscreen   = "662bd34c9a71bf0a21aa8c73a4d3d6f4908a279d"
+nabu-iris          = "db2a094f41249028d7c5d17f28caec3b7f86e2b4"
+nabu-camera        = "ced3a730b6394ddb61e36d2c111e014681bcfcf3"
+nabu-audio         = "b36995b60a7d494d3cd2f5e1033b516647edb637"
+nabu-accelerometer = "9b34fbf9c16bfaedf6d69d66b4a208926688112d"
+nabu-power         = "d48941b93cdf338a3a70293c08ae4a307c661e5e"

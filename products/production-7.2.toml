@@ -3,8 +3,9 @@
 # into one kernel output and one unified release, packaged as a single UKI
 # (Image + composed DTB + cmdline).
 #
-# The 7.2.7 port currently lives in the linux-7.2 tree itself, so build this
-# product with `compose config build collect package verify` (no `apply`).
+# The 7.2.7 port is carried by the module repositories as overlays on top of
+# the upstream v7.2.7 base, so the full pipeline (apply included) runs as for
+# any other product.
 [product]
 name    = "production-7.2"
 modules = ["nabu-platform", "nabu-display", "nabu-touchscreen", "nabu-iris", "nabu-camera", "nabu-audio", "nabu-accelerometer", "nabu-power"]
