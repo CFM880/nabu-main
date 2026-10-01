@@ -12,7 +12,7 @@ schema = 1
 # port away and copy the 6.14 overlays over the 7.2 tree); the pipeline stages
 # compose/config/build/collect/package/verify run as usual.
 path = "linux-7.2"
-base = "e490383191ba"
+base = "4d640adb5b58c8d05d484027bb313b53f9cce443"
 apply = false
 
 [modules]
@@ -26,11 +26,13 @@ nabu-accelerometer = "nabu-accelerometer"
 nabu-power         = "nabu-power"
 
 [commits]
-nabu-platform      = "03bf5bd05233c2c05ae2107c6c1c43df2fde61e8"
-nabu-display       = "1856181a747ce0bc5f5e5bd777523b0b3821f859"
-nabu-touchscreen   = "0235e3224c83caacde9fe006ca62f13b4007e000"
-nabu-iris          = "ccaeb5dc6e38ca1a2c28b1616f4c265b635d3d66"
-nabu-camera        = "f482fa88a7ecace020b0a996aaa85e6fb2e12b8e"
-nabu-audio         = "85f79378559ff84b351a5f3ece037c605422d5e6"
-nabu-accelerometer = "8559f9e52615105c9902f617fe29a9b449b855e3"
-nabu-power         = "54ba17c296cfb75fba38030f3e6a63a92b2e9c0e"
+# Module commits as pushed to the `7.2.7` branch of each repository, so the
+# pinned trees are reachable on GitHub (not only in this working copy).
+nabu-platform      = "888ca5854b2659b5b15894de94b58ce62f37086b"
+nabu-display       = "bab7feeaf517acab51ff25321af5b75e24570c8c"
+nabu-touchscreen   = "f3f2fc9be9a850f1bd3f5db1c2532a481fa2396b"
+nabu-iris          = "b5d839f8dc49bbd43b05db96b58edeae6e996320"
+nabu-camera        = "8314e621bd6813920946c0462dada59d6eb67eb3"
+nabu-audio         = "8529b208c26a58b716706335d17c585685cd9142"
+nabu-accelerometer = "c80da1c7f23f42a44fb8127409ec0a228934807b"
+nabu-power         = "3d11930d08d55d2f19e042b2eb87f4f45cd83587"
