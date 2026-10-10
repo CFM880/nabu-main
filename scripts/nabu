@@ -49,10 +49,16 @@ def run(cmd: list, cwd: Path | None = None, env: dict | None = None) -> None:
 
 
 def run_capture(cmd: list, cwd: Path | None = None) -> str:
-    return subprocess.run(
+    out = subprocess.run(
         [str(c) for c in cmd], cwd=cwd, check=True,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-    ).stdout.strip()
+    ).stdout
+    # GNU make prints "Entering/Leaving directory" (localised) around recursive
+    # invocations even with -s; drop those lines so callers only see real output.
+    lines = [l for l in out.splitlines()
+             if "Entering directory" not in l and "Leaving directory" not in l
+             and "进入目录" not in l and "离开目录" not in l]
+    return "\n".join(lines).strip()
 
 
 @dataclass
@@ -308,7 +314,11 @@ def cmd_compose(args) -> None:
 
 
 def kernel_release_base(kernel: Path) -> str:
-    return run_capture(["make", "-s", "-C", kernel, "kernelversion"])
+    out = run_capture(["make", "-s", "-C", kernel, "--no-print-directory",
+                       "kernelversion"])
+    # Guard against stray make chatter ("Entering directory ...") that would
+    # otherwise corrupt the version used to pick -<major.minor> patch variants.
+    return out.strip().splitlines()[-1].strip()
 
 
 def cmd_config(args) -> None:
