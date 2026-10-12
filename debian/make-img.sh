@@ -208,7 +208,8 @@ stage_dualboot_boot() {
 	# \EFI\BOOT\BOOTAA64.EFI to the lowercase bootaa64.efi shipped above.
 	# Do not add an uppercase copy: it would be the same directory entry and
 	# mtools refuses to write the duplicate.
-	# our menu (Debian + Reboot to Android) replaces the distro default
+	# Reference refind.conf (auto-scan, no hand-written menuentry); the payload
+	# already carries an identical copy, so this is only a refresh/override.
 	if [ -f "$REFIND_CONF" ]; then
 		install -m0644 "$REFIND_CONF" "$root/EFI/BOOT/refind.conf"
 	fi
