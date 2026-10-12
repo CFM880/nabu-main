@@ -141,6 +141,7 @@ if [ -n "$debian_action" ]; then
 		--env "NABU_USER=${NABU_USER:-}" \
 		--env "NABU_PASSWORD=${NABU_PASSWORD:-}" \
 		--env "NABU_LABEL=${NABU_LABEL:-}" \
+		--env "NABU_WIFI_MAC=${NABU_WIFI_MAC:-}" \
 		--env "NABU_PACKAGES_DIR=${NABU_PACKAGES_DIR:-}" \
 		--env "NABU_MODULES_FROM_BUILD=${NABU_MODULES_FROM_BUILD:-1}" \
 		--env "NABU_USERSPACE_FROM_BUILD=${NABU_USERSPACE_FROM_BUILD:-1}" \

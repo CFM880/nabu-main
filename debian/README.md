@@ -83,6 +83,7 @@ The kernel `Image` and DTB come from `nabu-main`'s collected artifacts
 | `KERNEL_RELEASE` | `6.14.11-nabu-full` | module dir / UKI uname |
 | `NABU_HOSTNAME` / `NABU_USER` / `NABU_PASSWORD` | `nabu-debian` / `nabu` / `nabu` | identity |
 | `NABU_LABEL` | `linux` | root partition PARTLABEL |
+| `NABU_WIFI_MAC` | `02:00:0c:79:07:42` | fixed WiFi MAC (the WCN3990 has none; keeps DHCP/IPs stable) |
 
 The full device/deploy documentation (partitioning, flashing, WiFi/audio/RTC
 notes, USB serial console) lives in the `nabu-debian` repository's `README.md`.
