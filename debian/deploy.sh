@@ -143,44 +143,20 @@ if [ -f "$tmp/EFI/debian/nabu-debian.efi" ]; then
 fi
 
 # ---- 3. sideload the boot-manager patch ------------------------------------
-# adb sideload only works after "Advanced -> ADB Sideload" (adbd restarts in
-# sideload mode), which is a manual step — ask whether to do it now.
-sideload_ready() {
-	local out
-	out=$("$ADB" get-state 2>&1)
-	case $out in
-	sideload) return 0 ;;
-	*permission*)
-		die "adb has no USB permission for the sideload interface (its USB id is 2717:d001, but the host udev rule only matches 18d1).  Add:
-  echo 'SUBSYSTEM==\"usb\", ATTRS{idVendor}==\"2717\", MODE=\"0666\", GROUP=\"plugdev\"' | sudo tee /etc/udev/rules.d/90-xiaomi-adb.rules
-  sudo udevadm control --reload-rules && sudo udevadm trigger
-then re-run."
-		;;
-	esac
-	return 1
-}
+# adb sideload needs TWRP's "Advanced -> ADB Sideload" started first.  Ask,
+# then send immediately (no polling): answer y once sideload mode is running.
 if [ "$DEPLOY_YES" = 1 ]; then
 	do_sideload=y
 else
-	printf 'Enter ADB Sideload now? (TWRP: Advanced -> ADB Sideload) [y/N] '
+	printf 'Start ADB Sideload in TWRP (Advanced -> ADB Sideload), then send it? [y/N] '
 	read -r do_sideload
 fi
 case $do_sideload in
 y | Y | yes | YES)
-	if ! sideload_ready; then
-		log "waiting for ADB Sideload mode (Advanced -> ADB Sideload)..."
-		for _ in $(seq 1 300); do
-			sideload_ready && break
-			sleep 2
-		done
-	fi
-	sideload_ready ||
-		die "device did not enter ADB Sideload mode (Advanced -> ADB Sideload)"
 	log "adb sideload $BOOTMANAGER_ZIP"
-	"$ADB" sideload "$BOOTMANAGER_ZIP" || die "sideload failed"
+	"$ADB" sideload "$BOOTMANAGER_ZIP" || die "sideload failed (is ADB Sideload started in TWRP?)"
 	log "sideload finished"
-	log "waiting for TWRP to come back after sideload..."
-	for _ in $(seq 1 60); do ready && break; sleep 2; done
+	for _ in $(seq 1 30); do ready && break; sleep 2; done
 	;;
 *)
 	log "skipping sideload — install $BOOTMANAGER_ZIP manually if needed"
