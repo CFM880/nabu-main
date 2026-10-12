@@ -145,7 +145,20 @@ fi
 # ---- 3. sideload the boot-manager patch ------------------------------------
 # adb sideload only works after "Advanced -> ADB Sideload" (adbd restarts in
 # sideload mode), which is a manual step — ask whether to do it now.
-sideload_ready() { [ "$("$ADB" get-state 2>/dev/null)" = sideload ]; }
+sideload_ready() {
+	local out
+	out=$("$ADB" get-state 2>&1)
+	case $out in
+	sideload) return 0 ;;
+	*permission*)
+		die "adb has no USB permission for the sideload interface (its USB id is 2717:d001, but the host udev rule only matches 18d1).  Add:
+  echo 'SUBSYSTEM==\"usb\", ATTRS{idVendor}==\"2717\", MODE=\"0666\", GROUP=\"plugdev\"' | sudo tee /etc/udev/rules.d/90-xiaomi-adb.rules
+  sudo udevadm control --reload-rules && sudo udevadm trigger
+then re-run."
+		;;
+	esac
+	return 1
+}
 if [ "$DEPLOY_YES" = 1 ]; then
 	do_sideload=y
 else
