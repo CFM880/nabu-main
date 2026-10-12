@@ -23,6 +23,9 @@ root):
 make debian-img DEBIAN_DOCKER=0
 ```
 
+When you run it from a terminal the container is given a TTY, so apt and
+mmdebstrap print their progress; `NABU_DEBIAN_VERBOSE=1` adds more detail.
+
 ## Layout
 
 | Path | Purpose |

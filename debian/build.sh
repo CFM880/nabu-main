@@ -411,13 +411,20 @@ build_rootfs() {
 
 	log "debootstrap $SUITE/$ARCH -> $ROOTFS"
 	log "mirror: $MIRROR"
+	log "installing the GNOME desktop; downloads a few GB and can take a while"
 	rm -rf "$ROOTFS"
 	mkdir -p "$WORK"
+
+	local verbose=
+	if [ -n "${NABU_DEBIAN_VERBOSE:-}" ]; then
+		verbose=--verbose
+	fi
 
 	export NABU_HOSTNAME=$HOSTNAME NABU_USER=$USERNAME
 	export NABU_PASSWORD=$PASSWORD NABU_LABEL=$LABEL
 
 	mmdebstrap \
+		$verbose \
 		--arch="$ARCH" \
 		--variant=important \
 		--components=main,contrib,non-free,non-free-firmware \

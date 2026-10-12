@@ -106,6 +106,13 @@ if [ -n "${NABU_PLATFORM:-}" ]; then
 	run_platform=(--platform "$NABU_PLATFORM")
 fi
 
+# Give the container a TTY when we have one, so apt/mmdebstrap print their
+# progress (they stay quiet when stdout is not a terminal).
+tty_args=()
+if [ -t 1 ]; then
+	tty_args=(-t)
+fi
+
 if [ -n "$debian_action" ]; then
 	# Drop the action word; anything left is forwarded to the debian scripts.
 	shift
@@ -116,6 +123,7 @@ if [ -n "$debian_action" ]; then
 	esac
 	docker run \
 		--rm \
+		"${tty_args[@]}" \
 		"${run_platform[@]}" \
 		--privileged \
 		--workdir "$nabu_main_dir/debian" \
@@ -136,6 +144,7 @@ if [ -n "$debian_action" ]; then
 		--env "NABU_PACKAGES_DIR=${NABU_PACKAGES_DIR:-}" \
 		--env "NABU_MODULES_FROM_BUILD=${NABU_MODULES_FROM_BUILD:-1}" \
 		--env "NABU_USERSPACE_FROM_BUILD=${NABU_USERSPACE_FROM_BUILD:-1}" \
+		--env "TERM=${TERM:-xterm}" \
 		"$image" \
 		bash -c "cd '$nabu_main_dir/debian' && $inner; rc=\$?; chown -R '$host_uid:$host_gid' '$nabu_main_dir/debian/work' '$nabu_main_dir/debian/out' 2>/dev/null || true; exit \$rc" debian "$@"
 	exit 0
