@@ -7,7 +7,8 @@ The unified **build / package / install** pipeline for the Xiaomi Pad 5 (nabu) L
 `main` itself contains no module knowledge: it only reads the `nabu-module.toml` contract in each
 sub-repository's root and uses it to perform overlay application, config merging, DTS composition,
 compilation, collection, UKI packaging, installation, and rollback. The kernel and all modules live
-in the parent directory of this directory, and `repos.lock` pins the upstream base and commits.
+in the parent directory of this directory, and `repos.lock` pins the upstream kernel base and lists
+the module paths.
 
 The kernel `base` is the **clean upstream** commit `b9d5d463` (Linux 6.14.11), not the intermediate
 `5181e135` (NABU baseline). The 60-commit port in between is carried entirely by the module
@@ -48,7 +49,7 @@ Switch product: `make PRODUCT=audio-only ...`.
 ```
 nabu-main/
 ├── Makefile              # entry point; all logic lives in scripts/nabu
-├── repos.lock            # kernel path/baseline commit + module paths/commits
+├── repos.lock            # kernel path/baseline commit + module paths
 ├── products/             # product definitions (production.toml / audio-only.toml)
 ├── config/               # production.cmdline, sm8150.config, uki.sbat
 ├── scripts/

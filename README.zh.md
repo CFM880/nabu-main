@@ -6,7 +6,7 @@
 
 main 自身不包含任何模块知识：它只读取各子仓根目录的 `nabu-module.toml`（契约），
 据此完成叠加、配置合并、DTS 组合、编译、收集、打包 UKI、安装与回滚。
-内核与所有模块都放在本目录的父目录中，通过 `repos.lock` 固定上游 base 与 commit。
+内核与所有模块都放在本目录的父目录中，通过 `repos.lock` 固定内核 base 并列出各模块路径。
 
 内核 `base` 是**干净上游** `b9d5d463`（Linux 6.14.11），而不是中间的 `5181e135`
 （NABU 基线）。中间那 60 个提交的 port 全部由各模块 overlay 承载，因此 `apply`
@@ -46,7 +46,7 @@ sudo make rollback       # 回滚到安装前状态
 ```
 nabu-main/
 ├── Makefile              # 入口，逻辑全部在 scripts/nabu
-├── repos.lock            # 内核路径/基线 commit + 各模块路径/commit
+├── repos.lock            # 内核路径/基线 commit + 各模块路径
 ├── products/             # 产品定义（production.toml / audio-only.toml）
 ├── config/               # production.cmdline、uki.sbat
 ├── scripts/
