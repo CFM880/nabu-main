@@ -31,9 +31,13 @@ libmbim-glib4
 libpolkit-gobject-1-0
 libgudev-1.0-0
 # Qualcomm modem/WPSS: it loads the WCN3990 WLAN firmware, so it must stay up.
-# rmtfs serves the modem's EFS (modemst/fsg); qrtr-tools provides qrtr-ns.
+# rmtfs serves the modem's EFS (modemst/fsg); qrtr-tools provides qrtr-ns;
+# tqftpserv is the QRTR TFTP daemon the modem fetches wlanmdsp.mbn from, so the
+# WLAN PD can boot (without it ath10k probe blocks forever and there is no
+# wlan0).  Install them here so the overlay stage needs no runtime apt-get.
 rmtfs
 qrtr-tools
+tqftpserv
 # cameras / video
 v4l-utils
 libcamera-tools
