@@ -107,8 +107,11 @@ if ! ash "grep -qs ' $ESP_MNT ' /proc/mounts"; then
 else
 	log "ESP already mounted at $ESP_MNT"
 fi
-ash "test -f '$ESP_MNT/EFI/BOOT/refind.conf'" ||
-	die "no EFI/BOOT/refind.conf on the ESP — wrong mountpoint?"
+if ash "test -f '$ESP_MNT/EFI/BOOT/bootaa64.efi'"; then
+	log "ESP already carries EFI/BOOT/bootaa64.efi (rEFInd)"
+else
+	log "ESP has no EFI/BOOT (blank ESP); our EFI/ tree supplies rEFInd"
+fi
 
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/nabu-efi.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
