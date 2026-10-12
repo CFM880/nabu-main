@@ -143,11 +143,22 @@ if [ -f "$tmp/EFI/debian/nabu-debian.efi" ]; then
 fi
 
 # ---- 3. sideload the boot-manager patch ------------------------------------
+# TWRP only accepts adb sideload after you enable "Advanced -> ADB Sideload"
+# (adbd restarts in sideload mode); wait for that state, then send the file.
+log "in TWRP: Advanced -> ADB Sideload, then swipe to start (waiting...)"
+sideload_ready() { [ "$("$ADB" get-state 2>/dev/null)" = sideload ]; }
+for _ in $(seq 1 300); do
+	sideload_ready && break
+	sleep 2
+done
+sideload_ready ||
+	die "device did not enter ADB Sideload mode (Advanced -> ADB Sideload)"
 log "adb sideload $BOOTMANAGER_ZIP"
-log "(if it stalls, enable Advanced -> ADB Sideload in TWRP)"
-"$ADB" sideload "$BOOTMANAGER_ZIP" ||
-	die "sideload failed; enable ADB Sideload mode in TWRP and re-run"
+"$ADB" sideload "$BOOTMANAGER_ZIP" || die "sideload failed"
 log "sideload finished"
+
+log "waiting for TWRP to come back after sideload..."
+for _ in $(seq 1 60); do ready && break; sleep 2; done
 
 # ---- 4. reboot to fastboot -------------------------------------------------
 log "adb reboot fastboot"
