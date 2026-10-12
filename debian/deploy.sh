@@ -86,7 +86,11 @@ ready() { case "$(state)" in device | recovery) return 0 ;; *) return 1 ;; esac;
 ash() { "$ADB" shell "$@" | tr -d '\r'; }
 
 # ---- 1. get into TWRP ------------------------------------------------------
-if [ "$(state)" = recovery ] ||
+in_sideload=0
+if [ "$(state)" = sideload ]; then
+	in_sideload=1
+	log "device already in ADB Sideload mode"
+elif [ "$(state)" = recovery ] ||
 	{ [ "$(state)" = device ] && [ -n "$(ash 'test -d /twres && echo yes')" ]; }; then
 	log "device already in TWRP; not booting it again"
 else
@@ -95,15 +99,17 @@ else
 		die "no fastboot device (power off, then hold Vol- while plugging USB)"
 	log "fastboot boot $TWRP_IMG"
 	"$FASTBOOT" boot "$TWRP_IMG"
+	log "waiting for TWRP adb..."
+	for _ in $(seq 1 90); do ready && break; sleep 2; done
+	ready || die "no adb device; is the tablet in TWRP?"
 fi
-
-log "waiting for TWRP adb..."
-for _ in $(seq 1 90); do ready && break; sleep 2; done
-ready || die "no adb device; is the tablet in TWRP?"
 log "adb state: $(state)"
 
-# ---- 2. copy the EFI tree onto the ESP -------------------------------------
-if ! ash "grep -qs ' $ESP_MNT ' /proc/mounts"; then
+# ---- 2. copy the EFI tree onto the ESP (needs normal TWRP adb) --------------
+if [ "$in_sideload" = 1 ]; then
+	log "in sideload mode; skipping the ESP copy"
+else
+	if ! ash "grep -qs ' $ESP_MNT ' /proc/mounts"; then
 	esp_dev=$(ash "ls -d /dev/block/bootdevice/by-partlabel/esp /dev/block/by-partlabel/esp 2>/dev/null | head -1" | tail -1)
 	[ -n "$esp_dev" ] || die "ESP partition not found (by-partlabel/esp)"
 	log "mounting ESP $esp_dev -> $ESP_MNT"
@@ -141,11 +147,12 @@ if [ -f "$tmp/EFI/debian/nabu-debian.efi" ]; then
 	[ "$want" = "$got" ] || die "UKI verify on the ESP failed ($got != $want)"
 	log "UKI on the ESP verified (md5 $want)"
 fi
+fi
 
 # ---- 3. sideload the boot-manager patch ------------------------------------
 # adb sideload needs TWRP's "Advanced -> ADB Sideload" started first.  Ask,
 # then send immediately (no polling): answer y once sideload mode is running.
-if [ "$DEPLOY_YES" = 1 ]; then
+if [ "$in_sideload" = 1 ] || [ "$DEPLOY_YES" = 1 ]; then
 	do_sideload=y
 else
 	printf 'Start ADB Sideload in TWRP (Advanced -> ADB Sideload), then send it? [y/N] '
