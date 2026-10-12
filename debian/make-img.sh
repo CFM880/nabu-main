@@ -214,6 +214,35 @@ stage_dualboot_boot() {
 	fi
 }
 
+# Bundle the assembled EFI tree as a zip, so it can be extracted onto an
+# existing ESP (e.g. over adb/TWRP: unzip onto the esp partition) instead of
+# flashing the whole esp.img.  Entries start with EFI/, like the reference
+# distribution's efi/EFI tree.
+make_efi_zip() {
+	local root=$1
+	local zip=$OUT/EFI.zip
+	rm -f "$zip"
+	if command -v zip >/dev/null 2>&1; then
+		(cd "$root" && zip -q -r "$zip" EFI)
+	elif command -v python3 >/dev/null 2>&1; then
+		(
+			cd "$root" &&
+				python3 - "$zip" <<'PY'
+import os, sys, zipfile
+with zipfile.ZipFile(sys.argv[1], "w", zipfile.ZIP_DEFLATED) as z:
+    for base, _dirs, files in os.walk("EFI"):
+        for name in files:
+            p = os.path.join(base, name)
+            z.write(p, p)
+PY
+		)
+	else
+		log "zip/python3 not found; skipping $zip"
+		return 0
+	fi
+	log "wrote $zip"
+}
+
 build_esp() {
 	local img=$OUT/esp.img root=$HERE/work/esp-root
 	resolve_esp_size
@@ -273,6 +302,7 @@ build_esp() {
 		fi
 	fi
 	log "wrote $img"
+	make_efi_zip "$root"
 }
 
 make_flash_script() {
@@ -403,7 +433,7 @@ if [ "$MAKE_FASTBOOT" -eq 1 ]; then make_fastboot_script; fi
 
 (
 	cd "$OUT" || exit 0
-	for f in esp.img linux.img; do
+	for f in esp.img linux.img EFI.zip; do
 		[ -f "$f" ] && sha256sum "$f"
 	done >IMG-SHA256SUMS
 ) 2>/dev/null || true
@@ -411,5 +441,6 @@ if [ "$MAKE_FASTBOOT" -eq 1 ]; then make_fastboot_script; fi
 log "done."
 if [ "$DO_ROOT" -eq 1 ]; then log "  rootfs: out/linux.img ($ROOT_SIZE bytes, compact)"; fi
 if [ "$DO_ESP" -eq 1 ]; then log "  esp:    out/esp.img ($ESP_SIZE bytes, dual-boot=$DUALBOOT)"; fi
+if [ "$DO_ESP" -eq 1 ]; then log "  efi:    out/EFI.zip (extract EFI/ onto an existing ESP)"; fi
 if [ "$MAKE_FLASH" -eq 1 ]; then log "  flash:  sudo out/flash.sh"; fi
 if [ "$MAKE_FASTBOOT" -eq 1 ]; then log "  flash:  ./out/flash-fastboot.sh  (PC + fastboot)"; fi

@@ -5,7 +5,7 @@ the Xiaomi Pad 5 (nabu) **Debian trixie arm64 + GNOME** system: the rootfs, the
 UKI and the flashable partition images.
 
 ```sh
-make debian-img        # rootfs + UKI + out/esp.img + out/linux.img
+make debian-img        # rootfs + UKI + out/esp.img + out/linux.img + out/EFI.zip
 make debian-rootfs     # rootfs tarball only
 make debian-uki        # rebuild out/nabu-debian.efi only (fast)
 make debian-clean      # remove debian/work and debian/out
@@ -42,7 +42,7 @@ and `debian/out` are reused. Force a fresh build with `make debian-clean` or
 | Path | Purpose |
 |---|---|
 | `build.sh` | rootfs (mmdebstrap) + optional input debs + `out/nabu-debian.efi` |
-| `make-img.sh` | `out/esp.img` / `out/linux.img` + `flash*.sh` (uses fakeroot) |
+| `make-img.sh` | `out/esp.img` / `out/linux.img` / `out/EFI.zip` + `flash*.sh` (uses fakeroot) |
 | `config/` | `packages.list`, `customize.sh`, `debian.cmdline`, `refind.conf`, … |
 | `boot/` | `nabu-dualboot-efi.zip` (rEFInd + Reboot2Android), `SOURCE.md` |
 | `packages/` | input debs (firmware/userspace/modules); `*.deb` is git-ignored |
