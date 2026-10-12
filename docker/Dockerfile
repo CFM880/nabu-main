@@ -118,6 +118,7 @@ RUN set -eux; \
 RUN apt-get update \
 	&& apt-get install -y --no-install-recommends \
 		mmdebstrap \
+		arch-test \
 		debian-archive-keyring \
 		gnupg \
 		mtools \

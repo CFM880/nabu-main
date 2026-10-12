@@ -13,8 +13,11 @@ make debian-clean      # remove debian/work and debian/out
 
 By default these run inside the build container (`docker/run.sh debian-*`):
 privileged (mmdebstrap needs chroot/mount) and with network access. The arm64
-rootfs is built on an x86_64 host through the host's qemu-binfmt. Set
-`DEBIAN_DOCKER=0` to run the scripts directly on the host instead (needs root):
+rootfs is built on an x86_64 host through the host's qemu-binfmt (the
+`arch-test` package is installed in the image; register the handler with
+`docker run --privileged --rm tonistiigi/binfmt --install arm64` if missing).
+Set `DEBIAN_DOCKER=0` to run the scripts directly on the host instead (needs
+root):
 
 ```sh
 make debian-img DEBIAN_DOCKER=0
