@@ -143,22 +143,36 @@ if [ -f "$tmp/EFI/debian/nabu-debian.efi" ]; then
 fi
 
 # ---- 3. sideload the boot-manager patch ------------------------------------
-# TWRP only accepts adb sideload after you enable "Advanced -> ADB Sideload"
-# (adbd restarts in sideload mode); wait for that state, then send the file.
-log "in TWRP: Advanced -> ADB Sideload, then swipe to start (waiting...)"
+# adb sideload only works after "Advanced -> ADB Sideload" (adbd restarts in
+# sideload mode), which is a manual step — ask whether to do it now.
 sideload_ready() { [ "$("$ADB" get-state 2>/dev/null)" = sideload ]; }
-for _ in $(seq 1 300); do
-	sideload_ready && break
-	sleep 2
-done
-sideload_ready ||
-	die "device did not enter ADB Sideload mode (Advanced -> ADB Sideload)"
-log "adb sideload $BOOTMANAGER_ZIP"
-"$ADB" sideload "$BOOTMANAGER_ZIP" || die "sideload failed"
-log "sideload finished"
-
-log "waiting for TWRP to come back after sideload..."
-for _ in $(seq 1 60); do ready && break; sleep 2; done
+if [ "$DEPLOY_YES" = 1 ]; then
+	do_sideload=y
+else
+	printf 'Enter ADB Sideload now? (TWRP: Advanced -> ADB Sideload) [y/N] '
+	read -r do_sideload
+fi
+case $do_sideload in
+y | Y | yes | YES)
+	if ! sideload_ready; then
+		log "waiting for ADB Sideload mode (Advanced -> ADB Sideload)..."
+		for _ in $(seq 1 300); do
+			sideload_ready && break
+			sleep 2
+		done
+	fi
+	sideload_ready ||
+		die "device did not enter ADB Sideload mode (Advanced -> ADB Sideload)"
+	log "adb sideload $BOOTMANAGER_ZIP"
+	"$ADB" sideload "$BOOTMANAGER_ZIP" || die "sideload failed"
+	log "sideload finished"
+	log "waiting for TWRP to come back after sideload..."
+	for _ in $(seq 1 60); do ready && break; sleep 2; done
+	;;
+*)
+	log "skipping sideload — install $BOOTMANAGER_ZIP manually if needed"
+	;;
+esac
 
 # ---- 4. reboot to fastboot -------------------------------------------------
 log "adb reboot fastboot"
