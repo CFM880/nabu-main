@@ -91,4 +91,9 @@ else
 	chmod 0644 "$root/etc/machine-id"
 fi
 
+# Completion marker: build.sh only reuses a rootfs, skipping debootstrap, when
+# this marker exists (i.e. mmdebstrap finished), never for a partial rootfs.
+install -d -m0755 "$root/var/lib/nabu-debian"
+: >"$root/var/lib/nabu-debian/rootfs-complete"
+
 echo "customize-hook: $hostname ready (user $user)" >&2
