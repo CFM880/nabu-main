@@ -4,7 +4,7 @@
 PRODUCT ?= production
 NABU    := ./scripts/nabu
 
-.PHONY: all discover apply compose config build collect package verify install install-modules rollback clean distclean debian-img debian-rootfs debian-uki debian-clean
+.PHONY: all discover apply compose config build collect package verify install install-modules rollback clean distclean debian-img debian-rootfs debian-uki debian-clean deploy
 
 all: apply compose config build collect package verify
 
@@ -79,3 +79,12 @@ endif
 
 debian-clean:
 	rm -rf debian/work debian/out
+
+# ---------------------------------------------------------------------------
+# Deploy the built Debian image (host-side; needs adb + fastboot and the
+# tablet's USB).  fastboot-boots TWRP, copies out/EFI.zip onto the ESP,
+# sideloads the boot-manager patch, then fastboot-flashes out/linux.img.
+# See debian/README.md; override paths via TWRP_IMG / BOOTMANAGER_ZIP etc.
+DEPLOY_ARGS ?=
+deploy:
+	debian/deploy.sh $(DEPLOY_ARGS)

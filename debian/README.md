@@ -48,6 +48,23 @@ and `debian/out` are reused. Force a fresh build with `make debian-clean` or
 | `packages/` | input debs (firmware/userspace/modules); `*.deb` is git-ignored |
 | `work/`, `out/` | build trees and outputs (git-ignored) |
 
+## Deploy
+
+```sh
+make deploy                 # run on the host; needs adb + fastboot + tablet USB
+make deploy DEPLOY_ARGS=-y  # skip the confirmation
+```
+
+`debian/deploy.sh` fastboot-boots the modded TWRP (`TWRP_IMG`), copies
+`out/EFI.zip` onto the ESP (`/esp` inside TWRP), sideloads `BOOTMANAGER_ZIP`
+(`installer_bootmanager_NOSB.zip`), reboots to fastboot, flashes `out/linux.img`
+to the `FB_ROOT_PART` partition (default `linux`) and reboots. It never flashes
+`esp.img` — that is built from scratch and would wipe the existing ESP boot
+chain. `TWRP_IMG`/`BOOTMANAGER_ZIP` default to `~/Downloads/nabu-ubuntu/`;
+override them (and `EFI_ZIP`, `ROOT_IMG`, `FB_ROOT_PART`, `ESP_MNT`) via the
+environment. Put the tablet in fastboot first (power off, hold Vol- while
+plugging USB).
+
 ## Inputs
 
 The **kernel modules** always come from the current nabu-main build: in the
