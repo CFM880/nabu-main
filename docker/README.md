@@ -20,7 +20,9 @@ The image ships no sources: the workspace (this `nabu-main` tree plus its
 run time — the exact layout `scripts/nabu` expects (it derives `ROOT` from the
 `nabu-main` location). Keeping the original path also matters because
 `linux-6.14` is a git worktree whose `.git` file stores an absolute `gitdir`.
-The image is based on Ubuntu 24.04 and uses the `aarch64-linux-gnu-` toolchain
+The image is based on Debian 13 (trixie), which provides a meson new enough for
+the userspace stack and a unified amd64+arm64 archive, and uses the
+`aarch64-linux-gnu-` toolchain
 that `nabu-main` expects by default.
 
 ## Build the image
@@ -111,6 +113,6 @@ Inside the image `NABU_CROSS_COMPILE=aarch64-linux-gnu-` is preset, matching the
 
 | File | Purpose |
 |---|---|
-| `Dockerfile` | multi-arch Ubuntu 24.04 image with the aarch64 toolchain |
+| `Dockerfile` | multi-arch Debian 13 image with the aarch64 toolchain |
 | `build-image.sh` | build the image for the host architecture with `docker buildx` |
 | `run.sh` | run `make` against the mounted workspace; privileged mode for install |

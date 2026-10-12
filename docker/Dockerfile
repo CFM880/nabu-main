@@ -1,21 +1,24 @@
-# syntax=docker/dockerfile:1
 # SPDX-License-Identifier: GPL-2.0-only
 #
-# nabu-main build / packaging image (multi-arch).
+# nabu-main build / packaging image (multi-arch), based on Debian 13 (trixie).
 #
 # Produces aarch64 kernel artifacts on both host architectures, at full native
 # speed (no qemu emulation):
 #   * amd64  -> native x86_64 host tools + aarch64-linux-gnu cross toolchain
 #   * arm64  -> everything native
 #
-# It runs the whole nabu-main pipeline (apply -> compose -> config -> build ->
-# collect -> package -> verify) and carries the tools needed by `make install` /
+# Runs the whole nabu-main pipeline (apply -> compose -> config -> build ->
+# collect -> package -> verify), builds the nabu-accelerometer userspace stack
+# (libssc / iio-sensor-proxy) and carries the tools needed by `make install` /
 # `make rollback` (ukify, efibootmgr, kmod, systemd, util-linux).
+#
+# Debian 13 provides meson >= 1.4 (needed by libssc 0.4.4) and a unified
+# amd64+arm64 archive, so cross builds need no extra ports repository.
 #
 # The image contains no sources.  At run time the workspace (this nabu-main
 # tree plus its linux-6.14 and nabu-* siblings) is bind-mounted at its original
 # host path, the layout scripts/nabu expects (ROOT = parent of nabu-main).
-FROM ubuntu:24.04
+FROM debian:13
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG TARGETARCH
@@ -23,21 +26,11 @@ ARG TARGETARCH
 # Kernel toolchain + build dependencies.  On arm64, gcc-aarch64-linux-gnu is the
 # native-compiler prefix nabu-main expects; on amd64 it is a cross compiler and
 # the native gcc (build-essential) builds the x86_64 host tools.  The amd64
-# build also needs arm64 libc/uapi headers and an arm64 libsystemd (for the
-# nabu-tablet-mode helper), which come from the Ubuntu ports archive.
+# build also needs arm64 libc/uapi headers, an arm64 libsystemd (for the
+# nabu-tablet-mode helper) and the aarch64 EFI stub (for the UKI).
 RUN set -eux; \
 	if [ "$TARGETARCH" = "amd64" ]; then \
-		sed -i 's/^Types: deb/Architectures: amd64\nTypes: deb/' \
-			/etc/apt/sources.list.d/ubuntu.sources; \
 		dpkg --add-architecture arm64; \
-		{ \
-			echo 'Types: deb'; \
-			echo 'URIs: http://ports.ubuntu.com/ubuntu-ports/'; \
-			echo 'Suites: noble noble-updates'; \
-			echo 'Components: main universe'; \
-			echo 'Architectures: arm64'; \
-			echo 'Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg'; \
-		} > /etc/apt/sources.list.d/ubuntu-ports.sources; \
 	fi; \
 	apt-get update; \
 	apt-get install -y --no-install-recommends \
@@ -66,7 +59,6 @@ RUN set -eux; \
 		lzop \
 		make \
 		openssl \
-		pahole \
 		perl \
 		pkg-config \
 		python3 \
@@ -82,19 +74,41 @@ RUN set -eux; \
 		apt-get install -y --no-install-recommends \
 			libc6-dev-arm64-cross \
 			linux-libc-dev-arm64-cross \
-			libsystemd-dev:arm64; \
+			libsystemd-dev:arm64 \
+			systemd-boot-efi:arm64; \
+	fi; \
+	if [ "$TARGETARCH" = "arm64" ]; then \
+		apt-get install -y --no-install-recommends systemd-boot-efi; \
 	fi; \
 	rm -rf /var/lib/apt/lists/*
 
-# ukify needs the target EFI stub linuxaa64.efi.stub (from systemd-boot-efi).
-# The native package provides the host's own stub; on amd64 the aarch64 stub
-# comes from systemd-boot-efi:arm64 (from the ports archive).  Kept in a
-# separate layer so tuning it does not invalidate the large toolchain layer.
+# Userspace built by the nabu-accelerometer build hook: libssc and
+# iio-sensor-proxy are meson projects needing GLib/QMI/protobuf/GUdev/polkit
+# development files for the target architecture, plus native build tools
+# (protoc, protoc-gen-c, glib-compile-resources).
 RUN set -eux; \
 	apt-get update; \
-	apt-get install -y --no-install-recommends systemd-boot-efi; \
+	apt-get install -y --no-install-recommends \
+		meson \
+		ninja-build \
+		pkg-config \
+		protobuf-compiler \
+		protobuf-c-compiler \
+		libglib2.0-dev-bin; \
 	if [ "$TARGETARCH" = "amd64" ]; then \
-		apt-get install -y --no-install-recommends systemd-boot-efi:arm64; \
+		apt-get install -y --no-install-recommends \
+			libglib2.0-dev:arm64 \
+			libqmi-glib-dev:arm64 \
+			libprotobuf-c-dev:arm64 \
+			libgudev-1.0-dev:arm64 \
+			libpolkit-gobject-1-dev:arm64; \
+	else \
+		apt-get install -y --no-install-recommends \
+			libglib2.0-dev \
+			libqmi-glib-dev \
+			libprotobuf-c-dev \
+			libgudev-1.0-dev \
+			libpolkit-gobject-1-dev; \
 	fi; \
 	rm -rf /var/lib/apt/lists/*
 

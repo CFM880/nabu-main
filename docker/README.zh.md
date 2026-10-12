@@ -19,7 +19,8 @@
 和各 `nabu-*` 模块)挂载到**宿主机上的原始路径**——这正是 `scripts/nabu` 期望的
 布局(它从 `nabu-main` 位置推导 `ROOT`)。保持原始路径很重要,因为 `linux-6.14`
 是一个 git worktree,其 `.git` 文件里记录的是绝对 `gitdir`。基础镜像是
-Ubuntu 24.04,使用 `nabu-main` 默认的 `aarch64-linux-gnu-` 工具链。
+镜像是基于 Debian 13(trixie)的:它提供足够新的 meson 来构建用户空间栈,且 amd64/arm64
+在同一个主仓库中(无需 ports),并使用 `nabu-main` 默认的 `aarch64-linux-gnu-` 工具链。
 
 ## 构建镜像
 
@@ -101,6 +102,6 @@ docker/run.sh rollback
 
 | 文件 | 作用 |
 |---|---|
-| `Dockerfile` | 带 aarch64 工具链的多架构 Ubuntu 24.04 镜像 |
+| `Dockerfile` | 带 aarch64 工具链的多架构 Debian 13 镜像 |
 | `build-image.sh` | 用 `docker buildx` 按宿主架构构建镜像 |
 | `run.sh` | 对挂载的工作区运行 `make`;install 走特权模式 |
