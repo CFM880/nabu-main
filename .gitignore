@@ -3,3 +3,8 @@
 /artifacts/
 __pycache__/
 *.pyc
+
+# Debian image build (nabu-main/debian): regenerated trees and input debs.
+/debian/work/
+/debian/out/
+/debian/packages/*.deb

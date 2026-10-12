@@ -19,6 +19,9 @@
 #   docker/run.sh -j4 build                # extra make flags
 #   docker/run.sh install                  # privileged; run on the target
 #   docker/run.sh rollback
+#   docker/run.sh debian-img               # build the Debian image (debian/)
+#   docker/run.sh debian-rootfs            # rootfs tarball only
+#   docker/run.sh debian-uki               # UKI only
 #
 # Environment:
 #   NABU_IMAGE     image tag        (default: nabu-main-builder:<host arch>)
@@ -47,6 +50,8 @@ fi
 
 image=${NABU_IMAGE:-nabu-main-builder:$arch}
 jobs=${NABU_JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)}
+host_uid=$(id -u)
+host_gid=$(id -g)
 
 # install/rollback need root + host filesystem access, even when preceded by
 # make variables, e.g. `run.sh PRODUCT=audio-only install`.
@@ -54,6 +59,16 @@ mode=build
 for arg in "$@"; do
 	case "$arg" in
 	install | install-modules | rollback) mode=install ;;
+	esac
+done
+
+# The Debian image build (debian/build.sh + debian/make-img.sh) runs inside a
+# privileged container: mmdebstrap needs chroot/mount and, for the arm64 rootfs
+# on an x86_64 host, the host qemu-binfmt.
+debian_action=
+for arg in "$@"; do
+	case "$arg" in
+	debian-img | debian-rootfs | debian-uki) debian_action=$arg ;;
 	esac
 done
 
@@ -71,10 +86,10 @@ fi
 # out/certs/extract-cert, ...) are compiled for the build host's architecture.
 # Drop them when they do not match the image we are about to run and let make
 # rebuild them; the arch-neutral .config and the aarch64 target objects stay, so
-# incremental builds survive.
+# incremental builds survive.  (Not relevant for the Debian image build.)
 out_dir=$nabu_main_dir/out
 probe=$out_dir/scripts/kconfig/conf
-if [ -f "$probe" ] && command -v file >/dev/null 2>&1; then
+if [ -z "$debian_action" ] && [ -f "$probe" ] && command -v file >/dev/null 2>&1; then
 	case "$arch" in
 	amd64) keep_re='x86-64' ;;
 	arm64) keep_re='aarch64|ARM' ;;
@@ -89,6 +104,39 @@ fi
 run_platform=()
 if [ -n "${NABU_PLATFORM:-}" ]; then
 	run_platform=(--platform "$NABU_PLATFORM")
+fi
+
+if [ -n "$debian_action" ]; then
+	# Drop the action word; anything left is forwarded to the debian scripts.
+	shift
+	case "$debian_action" in
+	debian-img) inner='./build.sh "$@" && ./make-img.sh' ;;
+	debian-rootfs) inner='./build.sh --rootfs-only "$@"' ;;
+	debian-uki) inner='./build.sh --uki-only "$@"' ;;
+	esac
+	docker run \
+		--rm \
+		"${run_platform[@]}" \
+		--privileged \
+		--workdir "$nabu_main_dir/debian" \
+		--volume "$workspace_dir":"$workspace_dir" \
+		--env "SUITE=${SUITE:-}" \
+		--env "MIRROR=${MIRROR:-}" \
+		--env "PRODUCT=${PRODUCT:-}" \
+		--env "KERNEL_RELEASE=${KERNEL_RELEASE:-}" \
+		--env "DTB_NAME=${DTB_NAME:-}" \
+		--env "PKG_BASE_VERSION=${PKG_BASE_VERSION:-}" \
+		--env "FIRMWARE_VERSION=${FIRMWARE_VERSION:-}" \
+		--env "USERSPACE_VERSION=${USERSPACE_VERSION:-}" \
+		--env "MODULES_VERSION=${MODULES_VERSION:-}" \
+		--env "NABU_HOSTNAME=${NABU_HOSTNAME:-}" \
+		--env "NABU_USER=${NABU_USER:-}" \
+		--env "NABU_PASSWORD=${NABU_PASSWORD:-}" \
+		--env "NABU_LABEL=${NABU_LABEL:-}" \
+		--env "NABU_PACKAGES_DIR=${NABU_PACKAGES_DIR:-}" \
+		"$image" \
+		bash -c "cd '$nabu_main_dir/debian' && $inner; rc=\$?; chown -R '$host_uid:$host_gid' '$nabu_main_dir/debian/work' '$nabu_main_dir/debian/out' 2>/dev/null || true; exit \$rc" debian "$@"
+	exit 0
 fi
 
 common=(

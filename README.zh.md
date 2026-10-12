@@ -38,8 +38,13 @@ sudo make rollback       # 回滚到安装前状态
 | `make install-modules` | 只装模块与用户态，不动 ESP / 启动项 |
 | `make rollback` | 按安装清单逆序恢复 |
 | `make clean` / `distclean` | 删除 `out/` / 同时删除 `artifacts/` |
+| `make debian-img` | 在容器里构建 Debian trixie arm64 镜像(rootfs + UKI + `esp.img`/`linux.img`) |
+| `make debian-rootfs` / `make debian-uki` | 只做 Debian rootfs tar / 只做 UKI |
 
 切换产品：`make PRODUCT=audio-only ...`。
+
+Debian 镜像构建(从 `nabu-debian` 迁移而来)位于 [`debian/`](debian/README.md);
+`make debian-img` 在构建容器里运行(特权 + 网络)。
 
 ## 目录结构
 

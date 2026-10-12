@@ -1,0 +1,27 @@
+[Unit]
+Description=Keep the nabu internal microphone capture session alive
+Documentation=file:///usr/local/share/doc/nabu-debian/README.md
+# The ADSP capture graph only works on the first RUN after boot, so hold a
+# client on the internal mic source: PipeWire then keeps that one working
+# ALSA session open for every other client (see nabu-debian README).
+After=pipewire.service wireplumber.service
+PartOf=pipewire.service
+Requisite=pipewire.service
+
+[Service]
+Type=simple
+# The ADSP capture graph is not armed until a while after the sound card
+# appears, so opening the mic too early captures silence and then holds that
+# dead session.  Wait for the system to settle first.
+ExecStartPre=/bin/sleep 30
+ExecStart=/usr/bin/pw-record --target alsa_input.platform-sound.HiFi__Mic__source \
+    --format s16 --rate 48000 --channels 2 /dev/null
+Restart=always
+RestartSec=3
+Nice=10
+# Discard the captured audio; this service only exists to hold the session.
+StandardOutput=null
+StandardError=null
+
+[Install]
+WantedBy=default.target

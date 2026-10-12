@@ -78,6 +78,23 @@ after an x86_64 host build) cannot run in the image (`cannot execute`, exit 127)
 target objects, since both target aarch64). If in doubt, run
 `docker/run.sh clean` for a full rebuild.
 
+### Debian image
+
+`nabu-main/debian/` builds the Debian trixie arm64 system (rootfs + UKI +
+`esp.img`/`linux.img`), migrated from the standalone `nabu-debian` repository.
+These targets run it in the container, which is started **privileged** (the
+arm64 rootfs build needs chroot/mount) with network access:
+
+```sh
+make debian-img        # rootfs + UKI + esp.img/linux.img
+make debian-rootfs     # rootfs tarball only
+make debian-uki        # rebuild out/nabu-debian.efi only
+```
+
+On `x86_64` the arm64 rootfs is built through the host qemu-binfmt. Set
+`DEBIAN_DOCKER=0` to run `debian/build.sh` / `debian/make-img.sh` directly on
+the host instead. See [`debian/README.md`](../debian/README.md).
+
 ## Install / rollback
 
 Install and rollback touch the host at absolute paths (`/lib/modules`,

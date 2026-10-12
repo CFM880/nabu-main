@@ -1,0 +1,17 @@
+[Unit]
+Description=Start the modem/WPSS remoteproc (WCN3990 WiFi firmware)
+Documentation=file:/usr/local/share/doc/nabu-debian/USB-CONSOLE.md
+After=sysinit.target
+# The modem fetches the WLAN PD image over QRTR TFTP and needs rmtfs for its
+# EFS, so bring those up before we poke the remoteproc.
+After=tqftpserv.service rmtfs.service
+Before=network-pre.target NetworkManager.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/lib/nabu/nabu-start-modem.sh
+TimeoutStartSec=60
+
+[Install]
+WantedBy=multi-user.target

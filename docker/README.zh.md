@@ -70,6 +70,22 @@ aarch64 目标文件会保留,增量构建不受影响(在 amd64 交叉镜像和
 切换时目标文件可复用,因为两者都面向 aarch64)。若不确定,执行
 `docker/run.sh clean` 做一次全量重建。
 
+### Debian 镜像
+
+`nabu-main/debian/` 构建 Debian trixie arm64 系统(rootfs + UKI +
+`esp.img`/`linux.img`),从独立的 `nabu-debian` 仓库迁移而来。以下目标在容器里运行,
+容器以**特权**方式启动(arm64 rootfs 构建需要 chroot/mount)并带网络:
+
+```sh
+make debian-img        # rootfs + UKI + esp.img/linux.img
+make debian-rootfs     # 只做 rootfs tar
+make debian-uki        # 只重建 out/nabu-debian.efi
+```
+
+在 `x86_64` 上,arm64 rootfs 通过宿主的 qemu-binfmt 构建。设 `DEBIAN_DOCKER=0`
+可直接在宿主上运行 `debian/build.sh` / `debian/make-img.sh`。详见
+[`debian/README.md`](../debian/README.md)。
+
 ## 安装 / 回滚
 
 安装和回滚会写入宿主机的绝对路径(`/lib/modules`、`/etc/systemd/system`、ESP 等),

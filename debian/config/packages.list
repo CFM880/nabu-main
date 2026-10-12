@@ -1,0 +1,46 @@
+# Debian trixie packages for the nabu (Xiaomi Pad 5) image.
+#
+# The GNOME desktop plus the device-specific runtime dependencies.  The kernel
+# is NOT taken from Debian: the nabu-main UKI and its /lib/modules tree are
+# overlaid by build.sh instead.
+task-gnome-desktop
+gnome-tweaks
+gnome-software
+sudo
+network-manager
+pipewire
+pipewire-pulse
+wireplumber
+alsa-utils
+bluez
+rfkill
+zram-tools
+locales
+console-setup
+keyboard-configuration
+dbus-user-session
+systemd-resolved
+# SLPI/SSC sensor stack: hexagonrpcd talks to the sdsp FastRPC device; the
+# patched iio-sensor-proxy binary and libssc are overlaid under /usr/local.
+hexagonrpcd
+iio-sensor-proxy
+libqmi-glib5
+libqrtr-glib0
+libprotobuf-c1
+libmbim-glib4
+libpolkit-gobject-1-0
+libgudev-1.0-0
+# Qualcomm modem/WPSS: it loads the WCN3990 WLAN firmware, so it must stay up.
+# rmtfs serves the modem's EFS (modemst/fsg); qrtr-tools provides qrtr-ns.
+rmtfs
+qrtr-tools
+# cameras / video
+v4l-utils
+libcamera-tools
+# firmware helpers are unnecessary (firmware is overlaid from the host tree),
+# but make sure a package manager tool is present for user installs.
+# ESP maintenance: sda31 reports a 4096-byte logical sector while the FAT
+# geometry is 512, so the kernel refuses to mount it (that is exactly what the
+# boot.mount failure is).  mtools works on the raw partition instead:
+#   sudo mcopy -o -i /dev/sda31 out/nabu-debian.efi ::/EFI/debian/nabu-debian.efi
+mtools

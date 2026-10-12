@@ -41,8 +41,13 @@ Common targets:
 | `make install-modules` | Install only modules and userspace, without touching the ESP / boot entries |
 | `make rollback` | Restore in reverse order per the install manifest |
 | `make clean` / `distclean` | Delete `out/` / also delete `artifacts/` |
+| `make debian-img` | Build the Debian trixie arm64 image (rootfs + UKI + `esp.img`/`linux.img`) in the container |
+| `make debian-rootfs` / `make debian-uki` | Debian rootfs tarball only / UKI only |
 
 Switch product: `make PRODUCT=audio-only ...`.
+
+The Debian image build (migrated from `nabu-debian`) lives in [`debian/`](debian/README.md);
+`make debian-img` runs it inside the build container (privileged, with network).
 
 ## Directory layout
 

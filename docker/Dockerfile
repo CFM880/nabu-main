@@ -112,6 +112,23 @@ RUN set -eux; \
 	fi; \
 	rm -rf /var/lib/apt/lists/*
 
+# Debian image build (make debian-img, see nabu-main/debian): mmdebstrap builds
+# the arm64 rootfs (via the host qemu-binfmt), ukify assembles the UKI, and
+# make-img.sh needs mtools/dosfstools/e2fsprogs to write the esp/linux images.
+RUN apt-get update \
+	&& apt-get install -y --no-install-recommends \
+		mmdebstrap \
+		debian-archive-keyring \
+		gnupg \
+		mtools \
+		dosfstools \
+		e2fsprogs \
+		fakeroot \
+		unzip \
+		pigz \
+		python3-pefile \
+	&& rm -rf /var/lib/apt/lists/*
+
 # The source trees are bind-mounted from the host and are normally owned by a
 # different uid than the container user, which makes git reject them as
 # "dubious ownership".  Trust all repositories through a system gitconfig that
