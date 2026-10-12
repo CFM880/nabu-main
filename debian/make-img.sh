@@ -8,9 +8,9 @@
 #                   it carries the same chain as the other nabu distros:
 #                   rEFInd + Reboot2Android.efi (from boot/nabu-dualboot-efi.zip,
 #                   see fetch-efi.sh) plus our Debian UKI at
-#                   EFI/nabu/nabu-debian.efi.  Boot it to choose Debian or
-#                   "Reboot to Android".  With DUALBOOT=0 it holds only the
-#                   UKI (EFI/nabu/nabu-debian.efi + a BOOTAA64.EFI fallback).
+#                   EFI/debian/nabu-debian.efi.  Boot it to choose Debian or
+#                   "Reboot to Android".  With DUALBOOT=0 it holds only the UKI
+#                   (EFI/debian/nabu-debian.efi + a BOOTAA64.EFI fallback).
 #   out/linux.img   ext4 rootfs: COMPACT (only the actual data, ~5-6 GiB), not
 #                   the whole partition.  It is written to the "linux"
 #                   partition and then grown to the partition size with
@@ -62,7 +62,7 @@ ROOT_DEFAULT=${ROOT_DEFAULT:-0}   # 0 => auto: data + 2 GiB headroom, aligned
 VOLID=${ESP_VOLID:-ESPNABU}
 ROOT_LABEL=${ROOT_LABEL:-${NABU_LABEL:-linux}}
 
-UKI_REL=${UKI_REL:-EFI/nabu/nabu-debian.efi}
+UKI_REL=${UKI_REL:-EFI/debian/nabu-debian.efi}
 ROOT_PART=${ROOT_PART:-/dev/disk/by-partlabel/${NABU_LABEL:-linux}}
 ESP_PART=${ESP_PART:-/dev/disk/by-partlabel/esp}
 ROOT_DEV_ALT=${ROOT_DEV_ALT:-/dev/disk/by-partlabel/userdata}
@@ -251,7 +251,7 @@ build_esp() {
 	[ -f "$OUT/nabu-debian.efi" ] || die "missing $OUT/nabu-debian.efi (run build.sh --uki-only)"
 
 	rm -rf "$root"
-	install -d -m0755 "$root/EFI/nabu"
+	install -d -m0755 "$root/EFI/debian"
 
 	if [ "$DUALBOOT" -eq 1 ]; then
 		# Same boot chain as the other nabu distros: rEFInd owns the ESP's

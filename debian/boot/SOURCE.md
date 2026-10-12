@@ -20,7 +20,7 @@ EFI/Android/Reboot2Android.efi  rodriguezst/Reboot2AndroidPkg
 Taken from the Fedora-for-nabu release bundle `efi-files-43.0.zip`
 (<https://github.com/jhuang6451/nabu_fedora/releases/tag/release-20260417-1049>),
 which packages the upstream binaries above. The `EFI/fedora/` kernel was
-removed; `make-img.sh` adds our `EFI/nabu/nabu-debian.efi` instead.
+removed; `make-img.sh` adds our `EFI/debian/nabu-debian.efi` instead.
 
 Upstream components:
 

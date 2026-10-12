@@ -127,9 +127,9 @@ for entry in "$tmp"/EFI/*; do
 done
 ash "sync"
 
-if [ -f "$tmp/EFI/nabu/nabu-debian.efi" ]; then
-	want=$(md5sum "$tmp/EFI/nabu/nabu-debian.efi" | awk '{print $1}')
-	got=$(ash "md5sum '$ESP_MNT/EFI/nabu/nabu-debian.efi'" | awk '{print $1}')
+if [ -f "$tmp/EFI/debian/nabu-debian.efi" ]; then
+	want=$(md5sum "$tmp/EFI/debian/nabu-debian.efi" | awk '{print $1}')
+	got=$(ash "md5sum '$ESP_MNT/EFI/debian/nabu-debian.efi'" | awk '{print $1}')
 	[ "$want" = "$got" ] || die "UKI verify on the ESP failed ($got != $want)"
 	log "UKI on the ESP verified (md5 $want)"
 fi
