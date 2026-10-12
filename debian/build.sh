@@ -65,6 +65,9 @@ USERSPACE_VERSION=${USERSPACE_VERSION:-$PKG_BASE_VERSION}
 MODULES_PKG=${MODULES_PKG:-nabu-linux-modules}
 MODULES_VERSION=${MODULES_VERSION:-$KERNEL_RELEASE}
 MODULES_SRC=${NABU_MODULES_SRC:-/lib/modules/$KERNEL_RELEASE}
+# When set, stage /lib/modules from the current nabu-main build (make
+# modules_install) instead of using a prebuilt modules deb or /lib/modules.
+MODULES_FROM_BUILD=${NABU_MODULES_FROM_BUILD:-0}
 FIRMWARE_DEB=$PACKAGES_DIR/${FIRMWARE_PKG}_${FIRMWARE_VERSION}_arm64.deb
 USERSPACE_DEB=$PACKAGES_DIR/${USERSPACE_PKG}_${USERSPACE_VERSION}_arm64.deb
 MODULES_DEB=$PACKAGES_DIR/${MODULES_PKG}_${MODULES_VERSION}_arm64.deb
@@ -198,9 +201,14 @@ preflight() {
 			[ -f "$NABU_ROOT/$m/nabu-module.toml" ] || die "missing module repo $NABU_ROOT/$m"
 		done
 		# missing inputs are only a problem when the host cannot provide them
-		pkg_input_present "nabu-linux-modules_*.deb" ||
-			[ -d "/lib/modules/$KERNEL_RELEASE" ] ||
-			die "no modules input in $PACKAGES_DIR and no /lib/modules/$KERNEL_RELEASE"
+		if [ "$MODULES_FROM_BUILD" = 1 ]; then
+			[ -d "$MAIN/out" ] ||
+				die "NABU_MODULES_FROM_BUILD=1 but $MAIN/out is missing; run 'make' in nabu-main first"
+		else
+			pkg_input_present "nabu-linux-modules_*.deb" ||
+				[ -d "/lib/modules/$KERNEL_RELEASE" ] ||
+				die "no modules input in $PACKAGES_DIR and no /lib/modules/$KERNEL_RELEASE"
+		fi
 		pkg_input_present "xiaomi-nabu-firmware_*.deb" ||
 			[ -d /lib/firmware/qcom/sm8150/xiaomi/nabu ] ||
 			die "no firmware input in $PACKAGES_DIR and no local firmware"
@@ -342,9 +350,10 @@ stage_modules_tree() {
 }
 
 build_modules_deb() {
+	local deb=${1:-$MODULES_DEB}
 	local stage=$WORK/modules-pkg
 	local isize
-	log "build modules package $MODULES_PKG $MODULES_VERSION"
+	log "build modules package $MODULES_PKG $MODULES_VERSION -> $deb"
 	stage_modules_tree "$stage"
 	isize=$(du -sk "$stage/usr" | cut -f1)
 	mkdir -p "$stage/DEBIAN"
@@ -360,7 +369,7 @@ Description: Nabu kernel modules for $KERNEL_RELEASE
  The complete /lib/modules/$KERNEL_RELEASE tree built by nabu-main, matching
  the $KERNEL_RELEASE UKI.
 EOF
-	dpkg_build "$stage" "$MODULES_DEB"
+	dpkg_build "$stage" "$deb"
 }
 
 # --------------------------------------------------------------------------
@@ -395,6 +404,11 @@ install_input_packages() {
 	local names=() f
 	for f in "$PACKAGES_DIR"/*.deb; do
 		[ -f "$f" ] || continue
+		if [ "$MODULES_FROM_BUILD" = 1 ]; then
+			case $(basename "$f") in
+			nabu-linux-modules_*.deb) continue ;;
+			esac
+		fi
 		install -D -m0644 "$f" "$ROOTFS/tmp/nabu-pkgs/$(basename "$f")"
 		names+=("/tmp/nabu-pkgs/$(basename "$f")")
 	done
@@ -416,10 +430,35 @@ install_one_deb() {
 }
 
 host_copy_modules() {
-	log "no modules package; copying host /lib/modules/$KERNEL_RELEASE"
+	log "no modules package; copying $MODULES_SRC"
 	install -d -m0755 "$ROOTFS/usr/lib/modules"
 	rm -rf "$ROOTFS/usr/lib/modules/$KERNEL_RELEASE"
-	cp -a "/lib/modules/$KERNEL_RELEASE" "$ROOTFS/usr/lib/modules/"
+	cp -a "$MODULES_SRC" "$ROOTFS/usr/lib/modules/"
+}
+
+# Stage /lib/modules/<release> from the current nabu-main build so the image
+# ships the modules we just compiled, not a prebuilt input deb.
+stage_modules_from_kernel() {
+	local kernel=${NABU_KERNEL_TREE:-} rel
+	if [ -z "$kernel" ]; then
+		rel=$(sed -n '/^\[kernel\]/,/^\[/p' "$MAIN/repos.lock" |
+			sed -n 's/^path *= *"\(.*\)"/\1/p' | head -1)
+		[ -n "$rel" ] || die "cannot determine the kernel path from $MAIN/repos.lock"
+		kernel=$NABU_ROOT/$rel
+	fi
+	[ -f "$kernel/Makefile" ] || die "kernel tree not found: $kernel (set NABU_KERNEL_TREE)"
+	[ -d "$MAIN/out" ] || die "missing $MAIN/out; run 'make' in nabu-main first"
+	log "staging /lib/modules/$KERNEL_RELEASE from the current nabu-main build"
+	rm -rf "$WORK/modules-root"
+	install -d -m0755 "$WORK/modules-root"
+	make -C "$kernel" O="$MAIN/out" ARCH="$ARCH" \
+		CROSS_COMPILE="${NABU_CROSS_COMPILE:-aarch64-linux-gnu-}" LOCALVERSION= \
+		-j"${NABU_JOBS:-$(nproc)}" \
+		INSTALL_MOD_PATH="$WORK/modules-root" modules_install
+	MODULES_SRC=$WORK/modules-root/lib/modules/$KERNEL_RELEASE
+	[ -d "$MODULES_SRC" ] || die "modules_install produced no $MODULES_SRC"
+	# drop the build/source links the kernel points back at the build host
+	rm -f "$MODULES_SRC/build" "$MODULES_SRC/source"
 }
 
 host_copy_userspace() {
@@ -459,7 +498,13 @@ install_missing_inputs() {
 		build_firmware_deb
 		install_one_deb "$FIRMWARE_DEB"
 	fi
-	pkg_input_present "nabu-linux-modules_*.deb" || host_copy_modules
+	if [ "$MODULES_FROM_BUILD" = 1 ]; then
+		stage_modules_from_kernel
+		build_modules_deb "$WORK/nabu-linux-modules_${MODULES_VERSION}_arm64.deb"
+		install_one_deb "$WORK/nabu-linux-modules_${MODULES_VERSION}_arm64.deb"
+	elif ! pkg_input_present "nabu-linux-modules_*.deb"; then
+		host_copy_modules
+	fi
 	pkg_input_present "nabu-userspace_*.deb" || host_copy_userspace
 }
 

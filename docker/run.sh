@@ -134,6 +134,7 @@ if [ -n "$debian_action" ]; then
 		--env "NABU_PASSWORD=${NABU_PASSWORD:-}" \
 		--env "NABU_LABEL=${NABU_LABEL:-}" \
 		--env "NABU_PACKAGES_DIR=${NABU_PACKAGES_DIR:-}" \
+		--env "NABU_MODULES_FROM_BUILD=${NABU_MODULES_FROM_BUILD:-1}" \
 		"$image" \
 		bash -c "cd '$nabu_main_dir/debian' && $inner; rc=\$?; chown -R '$host_uid:$host_gid' '$nabu_main_dir/debian/work' '$nabu_main_dir/debian/out' 2>/dev/null || true; exit \$rc" debian "$@"
 	exit 0

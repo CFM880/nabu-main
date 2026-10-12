@@ -36,6 +36,12 @@ make debian-img DEBIAN_DOCKER=0
 
 ## Inputs
 
+The **kernel modules** always come from the current nabu-main build: in the
+container `build.sh` runs `make modules_install` on `out/` and packages the
+result, so the image never ships a stale prebuilt modules deb. Set
+`NABU_MODULES_FROM_BUILD=0` to fall back to an input deb or `/lib/modules`
+instead.
+
 `build.sh` takes the device-specific pieces as input debs in `packages/`
 (firmware, `/usr/local` userspace, `/lib/modules`). When `packages/` is empty it
 falls back to a sibling `../nabu-debian/packages` (the original repository keeps
