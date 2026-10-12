@@ -42,6 +42,12 @@ result, so the image never ships a stale prebuilt modules deb. Set
 `NABU_MODULES_FROM_BUILD=0` to fall back to an input deb or `/lib/modules`
 instead.
 
+The **userspace** (`libssc`, `ssccli`, `iio-sensor-proxy-ssc`, the tablet-mode
+and sensors-sleep helpers, the D-Bus policy and the doc) is likewise packaged
+from the current collected artifacts (`artifacts/$PRODUCT`) plus the
+`nabu-accelerometer` module, so it matches the modules built here. Set
+`NABU_USERSPACE_FROM_BUILD=0` to use an input deb or the host `/usr/local`.
+
 `build.sh` takes the device-specific pieces as input debs in `packages/`
 (firmware, `/usr/local` userspace, `/lib/modules`). When `packages/` is empty it
 falls back to a sibling `../nabu-debian/packages` (the original repository keeps

@@ -68,6 +68,9 @@ MODULES_SRC=${NABU_MODULES_SRC:-/lib/modules/$KERNEL_RELEASE}
 # When set, stage /lib/modules from the current nabu-main build (make
 # modules_install) instead of using a prebuilt modules deb or /lib/modules.
 MODULES_FROM_BUILD=${NABU_MODULES_FROM_BUILD:-0}
+# Likewise, build the /usr/local userspace deb from the current nabu-main
+# collected artifacts instead of a prebuilt deb or the host /usr/local tree.
+USERSYS_FROM_BUILD=${NABU_USERSPACE_FROM_BUILD:-0}
 FIRMWARE_DEB=$PACKAGES_DIR/${FIRMWARE_PKG}_${FIRMWARE_VERSION}_arm64.deb
 USERSPACE_DEB=$PACKAGES_DIR/${USERSPACE_PKG}_${USERSPACE_VERSION}_arm64.deb
 MODULES_DEB=$PACKAGES_DIR/${MODULES_PKG}_${MODULES_VERSION}_arm64.deb
@@ -212,9 +215,14 @@ preflight() {
 		pkg_input_present "xiaomi-nabu-firmware_*.deb" ||
 			[ -d /lib/firmware/qcom/sm8150/xiaomi/nabu ] ||
 			die "no firmware input in $PACKAGES_DIR and no local firmware"
-		pkg_input_present "nabu-userspace_*.deb" ||
-			[ -x /usr/local/libexec/iio-sensor-proxy-ssc ] ||
-			die "no userspace input in $PACKAGES_DIR and no local userspace"
+		if [ "$USERSYS_FROM_BUILD" = 1 ]; then
+			{ [ -f "$ART/ssccli" ] && [ -f "$ART/iio-sensor-proxy-ssc" ]; } ||
+				die "NABU_USERSPACE_FROM_BUILD=1 but userspace artifacts are missing; run 'make package' first"
+		else
+			pkg_input_present "nabu-userspace_*.deb" ||
+				[ -x /usr/local/libexec/iio-sensor-proxy-ssc ] ||
+				die "no userspace input in $PACKAGES_DIR and no local userspace"
+		fi
 	fi
 
 	if [ "$ROOTFS_ONLY" -eq 0 ]; then
@@ -297,33 +305,54 @@ EOF
 stage_userspace_tree() {
 	local stage=$1
 	rm -rf "$stage"
-	install -d -m0755 "$stage/usr/local/libexec" "$stage/usr/local/bin" \
-		"$stage/usr/local/lib/aarch64-linux-gnu" \
-		"$stage/usr/share/dbus-1/system.d"
-	cp -a /usr/local/libexec/iio-sensor-proxy-ssc \
-		/usr/local/libexec/nabu-tablet-mode \
-		/usr/local/libexec/nabu-sensors-sleep \
-		/usr/local/libexec/nabu-sensors-resume "$stage/usr/local/libexec/"
-	cp -a /usr/local/bin/ssccli "$stage/usr/local/bin/"
-	local src
-	for src in /usr/local/lib/aarch64-linux-gnu/libssc.so*; do
-		[ -e "$src" ] || continue
-		cp -a "$src" "$stage/usr/local/lib/aarch64-linux-gnu/"
-	done
-	if [ -f /usr/share/dbus-1/system.d/net.hadess.SensorProxy.conf ]; then
-		cp -a /usr/share/dbus-1/system.d/net.hadess.SensorProxy.conf \
-			"$stage/usr/share/dbus-1/system.d/"
+	install -d -m0755 "$stage/usr/local/bin" "$stage/usr/local/lib" \
+		"$stage/usr/local/libexec" "$stage/usr/share/dbus-1/system.d" \
+		"$stage/usr/local/share/doc/nabu-accelerometer"
+
+	if [ -f "$ART/ssccli" ] && [ -f "$ART/iio-sensor-proxy-ssc" ]; then
+		# From the current nabu-main build (collected artifacts).
+		install -m0755 "$ART/ssccli" "$stage/usr/local/bin/ssccli"
+		install -m0644 "$ART/libssc.so.2" "$stage/usr/local/lib/libssc.so.2"
+		install -m0755 "$ART/iio-sensor-proxy-ssc" \
+			"$stage/usr/local/libexec/iio-sensor-proxy-ssc"
+		install -m0755 "$ART/nabu-tablet-mode" \
+			"$stage/usr/local/libexec/nabu-tablet-mode"
+		[ -f "$ART/net.hadess.SensorProxy.conf" ] &&
+			install -m0644 "$ART/net.hadess.SensorProxy.conf" \
+				"$stage/usr/share/dbus-1/system.d/net.hadess.SensorProxy.conf"
+	else
+		# Fall back to the host's installed /usr/local userspace.
+		install -d -m0755 "$stage/usr/local/lib/aarch64-linux-gnu"
+		cp -a /usr/local/libexec/iio-sensor-proxy-ssc \
+			/usr/local/libexec/nabu-tablet-mode "$stage/usr/local/libexec/" 2>/dev/null || true
+		cp -a /usr/local/bin/ssccli "$stage/usr/local/bin/" 2>/dev/null || true
+		local src
+		for src in /usr/local/lib/libssc.so* /usr/local/lib/aarch64-linux-gnu/libssc.so*; do
+			[ -e "$src" ] || continue
+			cp -a "$src" "$stage/usr/local/lib/"
+		done
+		[ -f /usr/share/dbus-1/system.d/net.hadess.SensorProxy.conf ] &&
+			cp -a /usr/share/dbus-1/system.d/net.hadess.SensorProxy.conf \
+				"$stage/usr/share/dbus-1/system.d/"
 	fi
-	if [ -d /usr/local/share/doc/nabu-accelerometer ]; then
-		install -d -m0755 "$stage/usr/local/share/doc"
-		cp -a /usr/local/share/doc/nabu-accelerometer "$stage/usr/local/share/doc/"
+
+	# The suspend/resume helper and the doc come from the module repository.
+	local mod=$NABU_ROOT/nabu-accelerometer
+	if [ -f "$mod/libexec/nabu-sensors-sleep" ]; then
+		install -m0755 "$mod/libexec/nabu-sensors-sleep" \
+			"$stage/usr/local/libexec/nabu-sensors-sleep"
+	fi
+	if [ -f "$mod/DEVELOPMENT.md" ]; then
+		install -m0644 "$mod/DEVELOPMENT.md" \
+			"$stage/usr/local/share/doc/nabu-accelerometer/DEVELOPMENT.md"
 	fi
 }
 
 build_userspace_deb() {
+	local deb=${1:-$USERSPACE_DEB}
 	local stage=$WORK/userspace-pkg
 	local isize
-	log "build userspace package $USERSPACE_PKG $USERSPACE_VERSION"
+	log "build userspace package $USERSPACE_PKG $USERSPACE_VERSION -> $deb"
 	stage_userspace_tree "$stage"
 	isize=$(du -sk "$stage/usr" | cut -f1)
 	mkdir -p "$stage/DEBIAN"
@@ -339,7 +368,7 @@ Description: Nabu SLPI/SSC userspace (libssc, ssccli, sensor proxy)
  Patched iio-sensor-proxy-ssc, libssc, ssccli, the tablet-mode helper, the
  sensors-sleep helper and the SensorProxy D-Bus policy for the nabu port.
 EOF
-	dpkg_build "$stage" "$USERSPACE_DEB"
+	dpkg_build "$stage" "$deb"
 }
 
 stage_modules_tree() {
@@ -404,13 +433,19 @@ install_input_packages() {
 	local names=() f
 	for f in "$PACKAGES_DIR"/*.deb; do
 		[ -f "$f" ] || continue
+		base=$(basename "$f")
 		if [ "$MODULES_FROM_BUILD" = 1 ]; then
-			case $(basename "$f") in
+			case $base in
 			nabu-linux-modules_*.deb) continue ;;
 			esac
 		fi
-		install -D -m0644 "$f" "$ROOTFS/tmp/nabu-pkgs/$(basename "$f")"
-		names+=("/tmp/nabu-pkgs/$(basename "$f")")
+		if [ "$USERSYS_FROM_BUILD" = 1 ]; then
+			case $base in
+			nabu-userspace_*.deb) continue ;;
+			esac
+		fi
+		install -D -m0644 "$f" "$ROOTFS/tmp/nabu-pkgs/$base"
+		names+=("/tmp/nabu-pkgs/$base")
 	done
 	if [ ${#names[@]} -eq 0 ]; then
 		log "no input packages in $PACKAGES_DIR"
@@ -462,32 +497,11 @@ stage_modules_from_kernel() {
 }
 
 host_copy_userspace() {
-	log "no userspace package; copying host /usr/local sensor stack"
-	rm -rf "$ROOTFS/usr/local/libexec"
-	install -d -m0755 "$ROOTFS/usr/local/libexec" "$ROOTFS/usr/local/bin" \
-		"$ROOTFS/usr/local/lib/aarch64-linux-gnu"
-	cp -a /usr/local/libexec/iio-sensor-proxy-ssc \
-		/usr/local/libexec/nabu-tablet-mode \
-		/usr/local/libexec/nabu-sensors-sleep \
-		/usr/local/libexec/nabu-sensors-resume "$ROOTFS/usr/local/libexec/"
-	rm -f "$ROOTFS/usr/local/bin/ssccli"
-	cp -a /usr/local/bin/ssccli "$ROOTFS/usr/local/bin/"
-	local src
-	for src in /usr/local/lib/aarch64-linux-gnu/libssc.so*; do
-		[ -e "$src" ] || continue
-		rm -f "$ROOTFS/usr/local/lib/aarch64-linux-gnu/$(basename "$src")"
-		cp -a "$src" "$ROOTFS/usr/local/lib/aarch64-linux-gnu/"
-	done
-	if [ -f /usr/share/dbus-1/system.d/net.hadess.SensorProxy.conf ]; then
-		install -d -m0755 "$ROOTFS/usr/share/dbus-1/system.d"
-		install -m0644 /usr/share/dbus-1/system.d/net.hadess.SensorProxy.conf \
-			"$ROOTFS/usr/share/dbus-1/system.d/"
-	fi
-	if [ -d /usr/local/share/doc/nabu-accelerometer ]; then
-		install -d -m0755 "$ROOTFS/usr/local/share/doc"
-		rm -rf "$ROOTFS/usr/local/share/doc/nabu-accelerometer"
-		cp -a /usr/local/share/doc/nabu-accelerometer "$ROOTFS/usr/local/share/doc/"
-	fi
+	log "no userspace package; copying the current userspace into the image"
+	local stage=$WORK/userspace-copy
+	stage_userspace_tree "$stage"
+	install -d -m0755 "$ROOTFS/usr/local" "$ROOTFS/usr/share"
+	cp -a "$stage/usr/." "$ROOTFS/usr/"
 }
 
 # Fill in any input that was not supplied as a .deb from the local host.
@@ -505,7 +519,12 @@ install_missing_inputs() {
 	elif ! pkg_input_present "nabu-linux-modules_*.deb"; then
 		host_copy_modules
 	fi
-	pkg_input_present "nabu-userspace_*.deb" || host_copy_userspace
+	if [ "$USERSYS_FROM_BUILD" = 1 ]; then
+		build_userspace_deb "$WORK/nabu-userspace_${USERSPACE_VERSION}_arm64.deb"
+		install_one_deb "$WORK/nabu-userspace_${USERSPACE_VERSION}_arm64.deb"
+	elif ! pkg_input_present "nabu-userspace_*.deb"; then
+		host_copy_userspace
+	fi
 }
 
 overlay_nabu_userspace() {
