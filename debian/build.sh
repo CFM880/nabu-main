@@ -860,8 +860,9 @@ main() {
 	fi
 
 	preflight
-	if [ "$REBUILD_ROOTFS" -eq 0 ] && [ -x "$ROOTFS/usr/bin/dpkg" ]; then
-		log "reusing existing rootfs at $ROOTFS (--rebuild-rootfs or --clean to rebuild)"
+	if [ "$REBUILD_ROOTFS" -eq 0 ] &&
+		[ -e "$ROOTFS/var/lib/nabu-debian/rootfs-complete" ]; then
+		log "reusing completed rootfs at $ROOTFS (--rebuild-rootfs or --clean to rebuild)"
 	else
 		build_rootfs
 	fi

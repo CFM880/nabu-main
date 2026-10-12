@@ -26,6 +26,17 @@ make debian-img DEBIAN_DOCKER=0
 When you run it from a terminal the container is given a TTY, so apt and
 mmdebstrap print their progress; `NABU_DEBIAN_VERBOSE=1` adds more detail.
 
+## Caching and interrupts
+
+A **completed** rootfs is kept in `debian/work/rootfs` and reused on the next
+run, skipping the multi-GB `mmdebstrap` download. Reuse is gated on
+`/var/lib/nabu-debian/rootfs-complete`, which `config/customize.sh` writes when
+`mmdebstrap` finishes — a rootfs interrupted mid-debootstrap is **not** reused
+(it has `dpkg`, but no marker). `mmdebstrap` keeps no reusable package download
+cache, so an interrupted debootstrap downloads again; the container image layer
+and `debian/out` are reused. Force a fresh build with `make debian-clean` or
+`debian/build.sh --rebuild-rootfs`.
+
 ## Layout
 
 | Path | Purpose |
