@@ -81,16 +81,21 @@ wait_fastboot() {
 	return 1
 }
 
-# ---- 1. boot TWRP ----------------------------------------------------------
-log "waiting for a device in fastboot mode..."
-wait_fastboot ||
-	die "no fastboot device (power off, then hold Vol- while plugging USB)"
-log "fastboot boot $TWRP_IMG"
-"$FASTBOOT" boot "$TWRP_IMG"
-
 state() { "$ADB" get-state 2>/dev/null || true; }
 ready() { case "$(state)" in device | recovery) return 0 ;; *) return 1 ;; esac; }
 ash() { "$ADB" shell "$@" | tr -d '\r'; }
+
+# ---- 1. get into TWRP ------------------------------------------------------
+if [ "$(state)" = recovery ] ||
+	{ [ "$(state)" = device ] && [ -n "$(ash 'test -d /twres && echo yes')" ]; }; then
+	log "device already in TWRP; not booting it again"
+else
+	log "waiting for a device in fastboot mode..."
+	wait_fastboot ||
+		die "no fastboot device (power off, then hold Vol- while plugging USB)"
+	log "fastboot boot $TWRP_IMG"
+	"$FASTBOOT" boot "$TWRP_IMG"
+fi
 
 log "waiting for TWRP adb..."
 for _ in $(seq 1 90); do ready && break; sleep 2; done
