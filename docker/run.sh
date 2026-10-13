@@ -163,6 +163,9 @@ common=(
 	--volume "$workspace_dir":"$workspace_dir"
 	--env NABU_JOBS="$jobs"
 	--env INSTALL_MOD_PATH="${INSTALL_MOD_PATH:-/}"
+	# Tell the Makefile it is already in the container, so its pipeline stages
+	# call scripts/nabu directly instead of recursing into docker/run.sh.
+	--env NABU_IN_CONTAINER=1
 )
 
 case "$mode" in

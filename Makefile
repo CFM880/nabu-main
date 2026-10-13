@@ -3,34 +3,48 @@
 # Makefile only forwards the product and the pipeline stage.
 PRODUCT ?= production
 NABU    := ./scripts/nabu
+.DEFAULT_GOAL := all
 
 .PHONY: all discover apply compose config build collect package verify install install-modules rollback clean distclean debian-img debian-rootfs debian-uki debian-clean debian-repair-ownership deploy deploy-flash
 
-all: apply compose config build collect package verify
+# ---------------------------------------------------------------------------
+# Pipeline stages (discover -> ... -> verify) always run inside the build
+# container via docker/run.sh, which carries the cross toolchain and the
+# userspace build dependencies (libsystemd/libva/glib/protoc/...).  docker/run.sh
+# sets NABU_IN_CONTAINER=1, and the stages then call scripts/nabu directly,
+# because docker is not available inside the container.
+ifeq ($(NABU_IN_CONTAINER),1)
+NABU_STAGE = $(NABU) --product $(PRODUCT)
+else
+NABU_STAGE = ./docker/run.sh PRODUCT=$(PRODUCT)
+endif
 
 discover:
-	$(NABU) --product $(PRODUCT) discover
+	$(NABU_STAGE) discover
 
 apply:
-	$(NABU) --product $(PRODUCT) apply
+	$(NABU_STAGE) apply
 
 compose:
-	$(NABU) --product $(PRODUCT) compose
+	$(NABU_STAGE) compose
 
 config:
-	$(NABU) --product $(PRODUCT) config
+	$(NABU_STAGE) config
 
 build:
-	$(NABU) --product $(PRODUCT) build
+	$(NABU_STAGE) build
 
 collect:
-	$(NABU) --product $(PRODUCT) collect
+	$(NABU_STAGE) collect
 
 package: collect
-	$(NABU) --product $(PRODUCT) package
+	$(NABU_STAGE) package
 
 verify:
-	$(NABU) --product $(PRODUCT) verify
+	$(NABU_STAGE) verify
+
+all:
+	$(NABU_STAGE) all
 
 install:
 	$(NABU) --product $(PRODUCT) install
