@@ -110,8 +110,8 @@ if [ "$in_sideload" = 1 ]; then
 	log "in sideload mode; skipping the ESP copy"
 else
 	if ! ash "grep -qs ' $ESP_MNT ' /proc/mounts"; then
-	esp_dev=$(ash "ls -d /dev/block/bootdevice/by-partlabel/esp /dev/block/by-partlabel/esp 2>/dev/null | head -1" | tail -1)
-	[ -n "$esp_dev" ] || die "ESP partition not found (by-partlabel/esp)"
+	esp_dev=$(ash "ls -d /dev/block/by-name/esp /dev/block/bootdevice/by-name/esp /dev/block/bootdevice/by-partlabel/esp /dev/block/by-partlabel/esp 2>/dev/null | head -1" | tail -1)
+	[ -n "$esp_dev" ] || die "ESP partition not found (by-name/esp, by-partlabel/esp)"
 	log "mounting ESP $esp_dev -> $ESP_MNT"
 	ash "mkdir -p '$ESP_MNT' && mount -t vfat '$esp_dev' '$ESP_MNT'" ||
 		die "mounting the ESP failed"
