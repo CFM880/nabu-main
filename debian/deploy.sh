@@ -94,9 +94,20 @@ elif [ "$(state)" = recovery ] ||
 	{ [ "$(state)" = device ] && [ -n "$(ash 'test -d /twres && echo yes')" ]; }; then
 	log "device already in TWRP; not booting it again"
 else
-	log "waiting for a device in fastboot mode..."
-	wait_fastboot ||
-		die "no fastboot device (power off, then hold Vol- while plugging USB)"
+	# Do not silently poll for fastboot either: let the user say when the
+	# tablet is there (skip the prompt with -y).
+	if [ "$DEPLOY_YES" != 1 ]; then
+		printf 'Put the tablet in fastboot (power off, hold Vol- while plugging USB), then press y (q to abort): '
+		while :; do
+			read -r ans || die "aborted"
+			case $ans in
+			y | Y | yes | YES) break ;;
+			q | Q | quit | n | N) die "aborted" ;;
+			*) printf 'press y when in fastboot (q to abort): ' ;;
+			esac
+		done
+	fi
+	wait_fastboot || die "no fastboot device (is the tablet in fastboot mode?)"
 	log "fastboot boot $TWRP_IMG"
 	"$FASTBOOT" boot "$TWRP_IMG"
 	# TWRP does not come up immediately after `fastboot boot`; let the user
