@@ -39,17 +39,22 @@ RUN set -eux; \
 	fi; \
 	cat /etc/apt/sources.list.d/debian.sources
 
-# Kernel toolchain + build dependencies.  On arm64, gcc-aarch64-linux-gnu is the
-# native-compiler prefix nabu-main expects; on amd64 it is a cross compiler and
-# the native gcc (build-essential) builds the x86_64 host tools.  The amd64
-# build also needs arm64 libc/uapi headers, an arm64 libsystemd (for the
-# nabu-tablet-mode helper) and the aarch64 EFI stub (for the UKI).
+# All build dependencies in a single transaction, so the package lists are
+# fetched and cleaned exactly once:
+#   * kernel toolchain (gcc-aarch64-linux-gnu, headers, ukify, kmod, ...); on
+#     amd64 also the arm64 libc/uapi headers, libsystemd and the EFI stub;
+#   * the userspace stack built by the nabu-accelerometer/iris hooks (meson +
+#     protoc, and GLib/QMI/protobuf/GUdev/polkit/libva dev files for the target
+#     architecture);
+#   * the Debian image build (make debian-img): mmdebstrap, mtools/dosfstools/
+#     e2fsprogs for the esp/linux images, fakeroot, ...
 RUN set -eux; \
 	if [ "$TARGETARCH" = "amd64" ]; then \
 		dpkg --add-architecture arm64; \
 	fi; \
 	apt-get update; \
 	apt-get install -y --no-install-recommends \
+		arch-test \
 		bc \
 		binutils-aarch64-linux-gnu \
 		bison \
@@ -57,16 +62,22 @@ RUN set -eux; \
 		bzip2 \
 		ca-certificates \
 		cpio \
+		debian-archive-keyring \
 		device-tree-compiler \
+		dosfstools \
 		dwarves \
+		e2fsprogs \
 		efibootmgr \
+		fakeroot \
 		file \
 		flex \
 		gcc-aarch64-linux-gnu \
 		git \
+		gnupg \
 		kmod \
 		libdw-dev \
 		libelf-dev \
+		libglib2.0-dev-bin \
 		libncurses-dev \
 		libssl-dev \
 		libsystemd-dev \
@@ -74,13 +85,22 @@ RUN set -eux; \
 		lz4 \
 		lzop \
 		make \
+		meson \
+		mmdebstrap \
+		mtools \
+		ninja-build \
 		openssl \
 		perl \
+		pigz \
 		pkg-config \
+		protobuf-c-compiler \
+		protobuf-compiler \
 		python3 \
+		python3-pefile \
 		rsync \
 		systemd \
 		systemd-ukify \
+		unzip \
 		util-linux \
 		uuid-dev \
 		xz-utils \
@@ -91,28 +111,7 @@ RUN set -eux; \
 			libc6-dev-arm64-cross \
 			linux-libc-dev-arm64-cross \
 			libsystemd-dev:arm64 \
-			systemd-boot-efi:arm64; \
-	fi; \
-	if [ "$TARGETARCH" = "arm64" ]; then \
-		apt-get install -y --no-install-recommends systemd-boot-efi; \
-	fi; \
-	rm -rf /var/lib/apt/lists/*
-
-# Userspace built by the nabu-accelerometer build hook: libssc and
-# iio-sensor-proxy are meson projects needing GLib/QMI/protobuf/GUdev/polkit
-# development files for the target architecture, plus native build tools
-# (protoc, protoc-gen-c, glib-compile-resources).
-RUN set -eux; \
-	apt-get update; \
-	apt-get install -y --no-install-recommends \
-		meson \
-		ninja-build \
-		pkg-config \
-		protobuf-compiler \
-		protobuf-c-compiler \
-		libglib2.0-dev-bin; \
-	if [ "$TARGETARCH" = "amd64" ]; then \
-		apt-get install -y --no-install-recommends \
+			systemd-boot-efi:arm64 \
 			libglib2.0-dev:arm64 \
 			libqmi-glib-dev:arm64 \
 			libprotobuf-c-dev:arm64 \
@@ -122,6 +121,7 @@ RUN set -eux; \
 			libdrm-dev:arm64; \
 	else \
 		apt-get install -y --no-install-recommends \
+			systemd-boot-efi \
 			libglib2.0-dev \
 			libqmi-glib-dev \
 			libprotobuf-c-dev \
@@ -131,24 +131,6 @@ RUN set -eux; \
 			libdrm-dev; \
 	fi; \
 	rm -rf /var/lib/apt/lists/*
-
-# Debian image build (make debian-img, see nabu-main/debian): mmdebstrap builds
-# the arm64 rootfs (via the host qemu-binfmt), ukify assembles the UKI, and
-# make-img.sh needs mtools/dosfstools/e2fsprogs to write the esp/linux images.
-RUN apt-get update \
-	&& apt-get install -y --no-install-recommends \
-		mmdebstrap \
-		arch-test \
-		debian-archive-keyring \
-		gnupg \
-		mtools \
-		dosfstools \
-		e2fsprogs \
-		fakeroot \
-		unzip \
-		pigz \
-		python3-pefile \
-	&& rm -rf /var/lib/apt/lists/*
 
 # The source trees are bind-mounted from the host and are normally owned by a
 # different uid than the container user, which makes git reject them as
