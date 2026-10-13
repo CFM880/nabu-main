@@ -101,14 +101,18 @@ RUN set -eux; \
 			libqmi-glib-dev:arm64 \
 			libprotobuf-c-dev:arm64 \
 			libgudev-1.0-dev:arm64 \
-			libpolkit-gobject-1-dev:arm64; \
+			libpolkit-gobject-1-dev:arm64 \
+			libva-dev:arm64 \
+			libdrm-dev:arm64; \
 	else \
 		apt-get install -y --no-install-recommends \
 			libglib2.0-dev \
 			libqmi-glib-dev \
 			libprotobuf-c-dev \
 			libgudev-1.0-dev \
-			libpolkit-gobject-1-dev; \
+			libpolkit-gobject-1-dev \
+			libva-dev \
+			libdrm-dev; \
 	fi; \
 	rm -rf /var/lib/apt/lists/*
 
