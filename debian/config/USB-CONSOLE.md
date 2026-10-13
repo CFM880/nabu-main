@@ -13,14 +13,20 @@ frequency 0 (idx 41 out of bounds)` (~189 lines per boot), which pushed
 complete early-boot ring buffer: `console=` only picks the *output*, printk
 always records to the ring buffer.
 
-## On the tablet (already enabled in the image)
+## On the tablet (login getty removed 2026-10-13)
 
 - The kernel gadget (legacy `g_serial`) defaults to `use_acm=1` and binds as
-  soon as the USB device controller is in device role.
-- `serial-getty@ttyGS0.service` opens `/dev/ttyGS0` for a login.  `build.sh`
-  symlinks it into `getty.target.wants` explicitly, so it does **not** depend on
-  `console=ttyGS0`: the login keeps working while the kernel stays quiet on the
-  serial port.
+  soon as the USB device controller is in device role.  `/dev/ttyGS0` only
+  appears once a USB **host** has enumerated the gadget, though.
+- `serial-getty@ttyGS0.service` is **not** enabled any more.  It used to be
+  symlinked into `getty.target.wants`, which made systemd wait for
+  `dev-ttyGS0.device` for the full 90 s device timeout on every boot without a
+  host cable; that stalled `multi-user.target` → `hexagonrpcd` → the SSC sensor
+  proxy and broke auto-rotation until a re-login.  To get a serial login
+  anyway, plug in a host and start it on demand:
+  ```sh
+  sudo systemctl start serial-getty@ttyGS0.service
+  ```
 - No `nabu-usb-console.service` / configfs helper is installed.
 
 ## On the host PC

@@ -573,20 +573,24 @@ overlay_nabu_userspace() {
 	install -m0644 "$m/nabu-platform/config/99-nabu-serial-wakeup.rules" "$etc/udev/rules.d/"
 
 	# --- USB serial debug console (kernel built-in gadget) ----------------
-	# ttyGS0 is created by the kernel itself (CONFIG_USB_G_SERIAL=y in the
-	# 7.2 production product); no userspace gadget service is needed.  Only
-	# install the doc and a serial getty so the console also offers a login.
+	# The ttyGS0 login getty is gone: ttyGS0 is only created once a USB host
+	# enumerates the gadget, so enabling serial-getty@ttyGS0.service made
+	# systemd wait for dev-ttyGS0.device for the full 90 s device timeout on
+	# every boot without a host cable.  That stalled multi-user.target ->
+	# hexagonrpcd -> the SSC sensor proxy, and the sensor stack came up only
+	# after Mutter had already started and claimed the (not yet ready)
+	# accelerometer.  Drop the getty and the on-demand udev rule; the kernel
+	# printk is still readable with `dmesg` (or by adding console=ttyGS0).
 	# Drop the superseded configfs gadget helper if a reused rootfs has it.
 	rm -f "$etc/systemd/system/nabu-usb-console.service" \
 		"$etc/systemd/system/multi-user.target.wants/nabu-usb-console.service" \
 		"$etc/udev/rules.d/99-nabu-usb-console.rules" \
-		"$ROOTFS/usr/local/lib/nabu/nabu-usb-console.sh"
+		"$etc/udev/rules.d/99-nabu-ttygs0-getty.rules" \
+		"$ROOTFS/usr/local/lib/nabu/nabu-usb-console.sh" \
+		"$etc/systemd/system/getty.target.wants/serial-getty@ttyGS0.service"
 	rmdir "$ROOTFS/usr/local/lib/nabu" 2>/dev/null || true
 	install -d -m0755 "$ROOTFS/usr/local/share/doc/nabu-debian"
 	install -m0644 "$HERE/config/USB-CONSOLE.md" "$ROOTFS/usr/local/share/doc/nabu-debian/"
-	install -d -m0755 "$etc/systemd/system/getty.target.wants"
-	ln -sf /usr/lib/systemd/system/serial-getty@.service \
-		"$etc/systemd/system/getty.target.wants/serial-getty@ttyGS0.service"
 
 	# --- modem/WPSS remoteproc: needed for the WCN3990 WiFi firmware --------
 	# qcom_q6v5_pas keeps the mpss rproc auto_boot=false, so start it at boot;
