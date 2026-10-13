@@ -685,28 +685,34 @@ EOF
 
 	install -m0644 "$m/nabu-audio/config/51-nabu-mic-s16.conf" "$etc/alsa/conf.d/"
 
-	# --- WirePlumber: keep the mic capture session alive ----------------------
-	# The ADSP capture graph only works on the first RUN after boot, so let
-	# PipeWire open the source once and never suspend it.  The rule lives
-	# under wireplumber.conf.d (WirePlumber 0.5); /etc/alsa/conf.d is the
-	# ALSA-lib directory and is not read by WirePlumber.
-	install -d -m0755 "$etc/wireplumber/wireplumber.conf.d"
-	install -m0644 "$HERE/config/wireplumber/51-nabu-mic-keepalive.conf" \
-		"$etc/wireplumber/wireplumber.conf.d/51-nabu-mic-keepalive.conf"
-
-	# --- hold the one working mic capture session open ------------------------
-	# The ADSP capture graph only works on the first RUN after boot, so run a
-	# client on the internal mic source for the whole session; PipeWire then
-	# keeps that working ALSA session open for every other client.
-	install -d -m0755 "$ROOTFS/etc/systemd/user"
-	install -m0644 "$HERE/config/nabu-mic-keepalive.service" \
-		"$ROOTFS/etc/systemd/user/nabu-mic-keepalive.service"
+	# --- microphone keepalive (opt-in) ----------------------------------------
+	# The ADSP capture graph only delivers data on the first RUN after boot; the
+	# prototype worked around that with a client permanently holding the internal
+	# mic session.  It is unreliable and makes the desktop show the mic as
+	# always recording, so it is OFF by default — enable with
+	# NABU_MIC_KEEPALIVE=1.
 	local uhome=$ROOTFS/home/$USERNAME
-	install -d -m0755 "$uhome/.config/systemd/user/default.target.wants"
-	ln -sf /etc/systemd/user/nabu-mic-keepalive.service \
-		"$uhome/.config/systemd/user/default.target.wants/nabu-mic-keepalive.service"
-	# The first user is always uid/gid 1000 in the image (see customize.sh).
-	chown -R 1000:1000 "$uhome/.config" 2>/dev/null || true
+	if [ "${NABU_MIC_KEEPALIVE:-0}" = 1 ]; then
+		install -d -m0755 "$etc/wireplumber/wireplumber.conf.d"
+		install -m0644 "$HERE/config/wireplumber/51-nabu-mic-keepalive.conf" \
+			"$etc/wireplumber/wireplumber.conf.d/51-nabu-mic-keepalive.conf"
+		install -d -m0755 "$ROOTFS/etc/systemd/user"
+		install -m0644 "$HERE/config/nabu-mic-keepalive.service" \
+			"$ROOTFS/etc/systemd/user/nabu-mic-keepalive.service"
+		install -d -m0755 "$uhome/.config/systemd/user/default.target.wants"
+		ln -sf /etc/systemd/user/nabu-mic-keepalive.service \
+			"$uhome/.config/systemd/user/default.target.wants/nabu-mic-keepalive.service"
+		# The first user is always uid/gid 1000 in the image (see customize.sh).
+		chown -R 1000:1000 "$uhome/.config" 2>/dev/null || true
+	else
+		# Drop a stale keepalive left by an earlier build of a reused rootfs.
+		rm -f "$ROOTFS/etc/systemd/user/nabu-mic-keepalive.service" \
+			"$uhome/.config/systemd/user/default.target.wants/nabu-mic-keepalive.service" \
+			"$etc/wireplumber/wireplumber.conf.d/51-nabu-mic-keepalive.conf"
+		rmdir "$uhome/.config/systemd/user/default.target.wants" \
+			"$uhome/.config/systemd/user" "$uhome/.config/systemd" \
+			"$uhome/.config" 2>/dev/null || true
+	fi
 
 	# --- ALSA UCM for the sm8150 sound card -----------------------------------
 	# Without a UCM, PipeWire finds no profile for card X5 and falls back to
