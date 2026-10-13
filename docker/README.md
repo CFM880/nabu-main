@@ -44,13 +44,21 @@ binfmt/qemu, so only use it on a real arm64 machine.
 
 ## Run the pipeline
 
+`make` and its stage targets already run inside this container, so these are
+equivalent:
+
 ```sh
-docker/run.sh                       # make (full pipeline)
-docker/run.sh build                 # a single stage: make build
+make                                # full pipeline (apply → ... → verify)
+make build                          # a single stage
+docker/run.sh                       # same, explicit
+docker/run.sh build
 docker/run.sh PRODUCT=audio-only build
 docker/run.sh -j4 build             # extra make flags are forwarded
 docker/run.sh clean
 ```
+
+`run.sh` sets `NABU_IN_CONTAINER=1` so the container's `make` calls
+`scripts/nabu` directly and never recurses back into docker.
 
 The workspace root is mounted read-write at its original host path (the `apply`
 stage does `git reset --hard` in the kernel tree; the kernel worktree records an

@@ -17,11 +17,17 @@ main 自身不包含任何模块知识：它只读取各子仓根目录的 `nabu
 ## 快速开始
 
 ```sh
-# 需要 arm64 交叉工具链（默认 aarch64-linux-gnu-）与 python3.11+
+# 先构建一次构建容器镜像（内含交叉工具链 + 用户态构建依赖）
+docker/build-image.sh
+
 make                     # apply → compose → config → build → collect → package → verify
 sudo make install        # 安装完整模块树 + UKI，并新建 UEFI 启动项
 sudo make rollback       # 回滚到安装前状态
 ```
+
+流水线阶段（`make`、`make build`、`apply`/`compose`/`config`/`collect`/`package`/`verify`）
+默认通过 `docker/run.sh` 在构建容器里执行，宿主机只需要有 docker。
+`make install` / `make rollback` 在目标设备上（特权）执行。
 
 常用目标：
 

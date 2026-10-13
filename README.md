@@ -20,11 +20,18 @@ fix — without depending on that intermediate point.
 ## Quick start
 
 ```sh
-# Requires an arm64 cross toolchain (default aarch64-linux-gnu-) and python3.11+
+# Build once: the builder image (cross toolchain + userspace build deps).
+docker/build-image.sh
+
 make                     # apply → compose → config → build → collect → package → verify
 sudo make install        # install the full module tree + UKI and create a UEFI boot entry
 sudo make rollback       # roll back to the pre-install state
 ```
+
+The pipeline stages (`make`, `make build`, `apply`/`compose`/`config`/`collect`/
+`package`/`verify`) run inside the build container via `docker/run.sh`, so the
+host only needs docker.  `make install` / `make rollback` run on the target
+device (privileged).
 
 Common targets:
 
