@@ -8,6 +8,9 @@ gnome-tweaks
 gnome-software
 sudo
 network-manager
+# SSH: the tablet is normally driven headless over WiFi, so ship sshd and
+# enable it in customize.sh (the package alone does not enable the unit here).
+openssh-server
 pipewire
 pipewire-pulse
 wireplumber

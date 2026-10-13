@@ -75,6 +75,7 @@ chroot "$root" systemctl enable gdm3.service >/dev/null 2>&1 || true
 chroot "$root" systemctl enable NetworkManager.service >/dev/null 2>&1 || true
 chroot "$root" systemctl enable hexagonrpcd.service >/dev/null 2>&1 || true
 chroot "$root" systemctl enable systemd-resolved.service >/dev/null 2>&1 || true
+chroot "$root" systemctl enable ssh.service >/dev/null 2>&1 || true
 if [ ! -L "$root/etc/resolv.conf" ]; then
 	rm -f "$root/etc/resolv.conf"
 	ln -s ../run/systemd/resolve/stub-resolv.conf "$root/etc/resolv.conf"
