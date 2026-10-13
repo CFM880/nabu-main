@@ -4,7 +4,7 @@
 PRODUCT ?= production
 NABU    := ./scripts/nabu
 
-.PHONY: all discover apply compose config build collect package verify install install-modules rollback clean distclean debian-img debian-rootfs debian-uki debian-clean debian-repair-ownership deploy
+.PHONY: all discover apply compose config build collect package verify install install-modules rollback clean distclean debian-img debian-rootfs debian-uki debian-clean debian-repair-ownership deploy deploy-flash
 
 all: apply compose config build collect package verify
 
@@ -101,3 +101,10 @@ endif
 DEPLOY_ARGS ?=
 deploy:
 	debian/deploy.sh $(DEPLOY_ARGS)
+
+# Flash only the rootfs (when the ESP / sideload work is already done) and
+# reboot — no TWRP round trip.
+FB_ROOT_PART ?= linux
+deploy-flash:
+	fastboot flash $(FB_ROOT_PART) debian/out/linux.img
+	fastboot reboot
