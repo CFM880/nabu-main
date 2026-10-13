@@ -173,6 +173,13 @@ build_root() {
 	*.gz) tar -C "$stage" --numeric-owner -xzpf "$tar" ;;
 	*.tar) tar -C "$stage" --numeric-owner -xpf "$tar" ;;
 	esac
+	# Guard against a corrupted rootfs tarball (non-root ownership silently
+	# breaks setuid tools like sudo in the booted image).
+	if [ -e "$stage/usr/bin/sudo" ]; then
+		su=$(stat -c %u "$stage/usr/bin/sudo")
+		[ "$su" = 0 ] ||
+			die "rootfs tarball has /usr/bin/sudo owned by uid $su (expected 0); rebuild the rootfs"
+	fi
 	# du includes on-disk block padding; add 20% + 1 GiB headroom
 	local used_kb headroom_kb
 	used_kb=$(du -sk "$stage" | cut -f1)

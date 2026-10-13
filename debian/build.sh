@@ -736,6 +736,19 @@ EOF
 	install -d -m0700 "$ROOTFS/var/lib/tqftpserv/sensors/registry"
 }
 
+# Fail loudly if the rootfs ownership is not root — e.g. an external chown
+# turned it into uid 1000.  That silently breaks setuid tools (sudo, passwd,
+# su, ...) in the booted image.
+assert_root_ownership() {
+	local f u
+	for f in usr/bin/sudo usr/bin/passwd etc/passwd; do
+		[ -e "$ROOTFS/$f" ] || continue
+		u=$(stat -c %u "$ROOTFS/$f")
+		[ "$u" = 0 ] ||
+			die "rootfs ownership corrupted: /$f is uid $u (expected 0); run 'make debian-clean' and rebuild"
+	done
+}
+
 finalize_rootfs() {
 	log "finalize rootfs"
 	# A reused work/rootfs may carry state from an earlier/different base:
@@ -893,6 +906,7 @@ main() {
 	install_missing_inputs
 	overlay_nabu_userspace
 	finalize_rootfs
+	assert_root_ownership
 	package_rootfs
 
 	if [ "$ROOTFS_ONLY" -eq 0 ]; then
