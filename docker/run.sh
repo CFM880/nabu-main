@@ -68,7 +68,9 @@ done
 debian_action=
 for arg in "$@"; do
 	case "$arg" in
-	debian-img | debian-rootfs | debian-uki | debian-clean) debian_action=$arg ;;
+	debian-img | debian-rootfs | debian-uki | debian-clean | debian-repair-ownership)
+		debian_action=$arg
+		;;
 	esac
 done
 
@@ -121,6 +123,7 @@ if [ -n "$debian_action" ]; then
 	debian-rootfs) inner='./build.sh --rootfs-only "$@"' ;;
 	debian-uki) inner='./build.sh --uki-only "$@"' ;;
 	debian-clean) inner='rm -rf work out' ;;
+	debian-repair-ownership) inner='./repair-ownership.sh "$@"' ;;
 	esac
 	docker run \
 		--rm \

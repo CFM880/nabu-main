@@ -4,7 +4,7 @@
 PRODUCT ?= production
 NABU    := ./scripts/nabu
 
-.PHONY: all discover apply compose config build collect package verify install install-modules rollback clean distclean debian-img debian-rootfs debian-uki debian-clean deploy
+.PHONY: all discover apply compose config build collect package verify install install-modules rollback clean distclean debian-img debian-rootfs debian-uki debian-clean debian-repair-ownership deploy
 
 all: apply compose config build collect package verify
 
@@ -82,6 +82,15 @@ ifeq ($(DEBIAN_DOCKER),1)
 	./docker/run.sh debian-clean
 else
 	rm -rf debian/work debian/out
+endif
+
+# One-off, no-download repair of a rootfs whose ownership was corrupted (see
+# debian/repair-ownership.sh).  Rebuild afterwards with `make debian-img`.
+debian-repair-ownership:
+ifeq ($(DEBIAN_DOCKER),1)
+	./docker/run.sh debian-repair-ownership
+else
+	debian/repair-ownership.sh
 endif
 
 # ---------------------------------------------------------------------------
