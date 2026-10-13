@@ -85,14 +85,25 @@ state() { "$ADB" get-state 2>/dev/null || true; }
 ready() { case "$(state)" in device | recovery) return 0 ;; *) return 1 ;; esac; }
 ash() { "$ADB" shell "$@" | tr -d '\r'; }
 
+# The host may have other adb devices attached (e.g. a phone), which makes a
+# bare `adb get-state` fail with "more than one device".  Lock onto the nabu.
+pick_serial() {
+	"$ADB" devices -l 2>/dev/null |
+		awk 'NR > 1 && (/product:twrp_nabu/ || /model:Xiaomi_Pad_5/ || /device:nabu/) { print $1; exit }'
+}
+
 # ---- 1. get into TWRP ------------------------------------------------------
 in_sideload=0
-if [ "$(state)" = sideload ]; then
+serial=${ANDROID_SERIAL:-}
+[ -n "$serial" ] || serial=$(pick_serial)
+[ -n "$serial" ] && export ANDROID_SERIAL=$serial
+if [ -n "$serial" ] && [ "$(state)" = sideload ]; then
 	in_sideload=1
-	log "device already in ADB Sideload mode"
-elif [ "$(state)" = recovery ] ||
-	{ [ "$(state)" = device ] && [ -n "$(ash 'test -d /twres && echo yes')" ]; }; then
-	log "device already in TWRP; not booting it again"
+	log "device already in ADB Sideload mode ($serial)"
+elif [ -n "$serial" ] &&
+	{ [ "$(state)" = recovery ] ||
+		{ [ "$(state)" = device ] && [ -n "$(ash 'test -d /twres && echo yes')" ]; }; }; then
+	log "device already in TWRP ($serial); not booting it again"
 else
 	# Do not silently poll for fastboot either: let the user say when the
 	# tablet is there (skip the prompt with -y).
@@ -123,7 +134,12 @@ else
 			esac
 		done
 	fi
-	log "waiting for TWRP adb..."
+	serial=${ANDROID_SERIAL:-}
+	[ -n "$serial" ] || serial=$(pick_serial)
+	[ -n "$serial" ] ||
+		die "tablet not found over adb after fastboot boot (set ANDROID_SERIAL; see 'adb devices -l')"
+	export ANDROID_SERIAL=$serial
+	log "waiting for TWRP adb ($serial)..."
 	for _ in $(seq 1 90); do ready && break; sleep 2; done
 	ready || die "no adb device; is the tablet in TWRP?"
 fi
