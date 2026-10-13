@@ -755,6 +755,18 @@ assert_root_ownership() {
 	done
 }
 
+# task-gnome-desktop Recommends LibreOffice; it is large and useless here, so
+# drop it (and its now-orphaned deps) after the packages are installed.
+strip_libreoffice() {
+	if ! chroot "$ROOTFS" sh -c "dpkg-query -W -f='\${Package}\\n' 'libreoffice*' 2>/dev/null | grep -q ."; then
+		return 0
+	fi
+	log "removing LibreOffice (pulled in by task-gnome-desktop Recommends)"
+	chroot "$ROOTFS" apt-get -y --purge remove 'libreoffice*' >/dev/null 2>&1 ||
+		chroot "$ROOTFS" sh -c "dpkg --purge --force-all \$(dpkg-query -W -f='\${Package} ' 'libreoffice*' 2>/dev/null)" >/dev/null 2>&1 || true
+	chroot "$ROOTFS" apt-get -y --purge autoremove >/dev/null 2>&1 || true
+}
+
 finalize_rootfs() {
 	log "finalize rootfs"
 	# A reused work/rootfs may carry state from an earlier/different base:
@@ -911,6 +923,7 @@ main() {
 	install_input_packages
 	install_missing_inputs
 	overlay_nabu_userspace
+	strip_libreoffice
 	finalize_rootfs
 	assert_root_ownership
 	package_rootfs
