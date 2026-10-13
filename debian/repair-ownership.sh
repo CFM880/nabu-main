@@ -5,19 +5,18 @@
 # recursive chown (everything became uid 1000 and setuid bits were lost, which
 # breaks sudo/passwd/su).  Instead of re-running debootstrap, reset the tree to
 # root and restore owner+mode for every path it shares with a pristine
-# reference rootfs of the same Debian family (the old nabu-debian one).
+# reference rootfs of the same Debian family (e.g. a freshly debootstrapped
+# one).
 #
 #   make debian-repair-ownership
 #
 # Environment: TARGET (default debian/work/rootfs), REF (default
-# ../nabu-debian/work/rootfs).
+# debian/work/rootfs-pristine; point it at any pristine same-family rootfs).
 set -euo pipefail
 
 HERE=$(cd -- "$(dirname -- "$0")" && pwd)
-MAIN=$(dirname -- "$HERE")
-ROOT=$(dirname -- "$MAIN")
 TARGET=${TARGET:-$HERE/work/rootfs}
-REF=${REF:-$ROOT/nabu-debian/work/rootfs}
+REF=${REF:-$HERE/work/rootfs-pristine}
 
 log() { printf '\033[1;34m[repair]\033[0m %s\n' "$*"; }
 die() {

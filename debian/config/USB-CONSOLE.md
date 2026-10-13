@@ -56,10 +56,10 @@ To watch a boot live, put `console=ttyGS0` (after `console=tty0`) back into
 `CON_PRINTBUFFER`, so the whole boot ring buffer is replayed as soon as the
 gadget is created and a hang from before USB came up stays visible.
 
-The `nabu-debian` repository ships `capture-serial.sh` for long captures: it
-auto-detects the gadget, reconnects after a reboot or re-plug, and keeps
-appending to one log until Ctrl-C (with the default command line it captures
-the login/interactive session, not the boot log):
+`debian/capture-serial.sh` (in this repository) captures the console for long
+runs: it auto-detects the gadget, reconnects after a reboot or re-plug, and
+keeps appending to one log until Ctrl-C (with the default command line it
+captures the login/interactive session, not the boot log):
 
 ```sh
 ./capture-serial.sh -t -o nabu-boot.log

@@ -43,9 +43,14 @@ and `debian/out` are reused. Force a fresh build with `make debian-clean` or
 |---|---|
 | `build.sh` | rootfs (mmdebstrap) + optional input debs + `out/nabu-debian.efi` |
 | `make-img.sh` | `out/esp.img` / `out/linux.img` / `out/EFI.zip` + `flash*.sh` (uses fakeroot) |
+| `deploy.sh` | TWRP + fastboot deploy of the UKI/rootfs (single-system path) |
+| `fetch-efi.sh` | refresh `boot/nabu-dualboot-efi.zip` from the pinned releases |
+| `capture-serial.sh`, `serial_cmd.py` | USB CDC-ACM console capture / scripted console |
+| `repair-ownership.sh` | one-off rootfs ownership repair |
 | `config/` | `packages.list`, `customize.sh`, `debian.cmdline`, `refind.conf`, … |
 | `boot/` | `nabu-dualboot-efi.zip` (rEFInd + Reboot2Android), `SOURCE.md` |
 | `packages/` | input debs (firmware/userspace/modules); `*.deb` is git-ignored |
+| `README.zh.md` | full device/deploy notes (partitioning, WiFi/audio/RTC, …) |
 | `work/`, `out/` | build trees and outputs (git-ignored) |
 
 ## Deploy
@@ -81,10 +86,9 @@ from the current collected artifacts (`artifacts/$PRODUCT`) plus the
 
 `build.sh` takes the device-specific pieces as input debs in `packages/`
 (firmware, `/usr/local` userspace, `/lib/modules`). When `packages/` is empty it
-falls back to a sibling `../nabu-debian/packages` (the original repository keeps
-those in place), and finally to files already present on the host
-(`/lib/firmware`, `/lib/modules`, `/usr/local`) when not running in the
-container. Override the directory with `NABU_PACKAGES_DIR`.
+falls back to files already present on the host (`/lib/firmware`,
+`/lib/modules`, `/usr/local`) when not running in the container. Override the
+directory with `NABU_PACKAGES_DIR`.
 
 The kernel `Image` and DTB come from `nabu-main`'s collected artifacts
 (`artifacts/$PRODUCT`, default `production` = `6.14.11-nabu-full`). Run
@@ -104,4 +108,4 @@ The kernel `Image` and DTB come from `nabu-main`'s collected artifacts
 | `NABU_MIC_KEEPALIVE` | `0` | enable the experimental always-on mic client (makes the mic look permanently recording) |
 
 The full device/deploy documentation (partitioning, flashing, WiFi/audio/RTC
-notes, USB serial console) lives in the `nabu-debian` repository's `README.md`.
+notes, USB serial console) lives in [`README.zh.md`](README.zh.md).

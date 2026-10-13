@@ -41,13 +41,6 @@ WORK=${NABU_WORK:-$HERE/work}
 ROOTFS=$WORK/rootfs
 OUT=$HERE/out
 PACKAGES_DIR=${NABU_PACKAGES_DIR:-$HERE/packages}
-# Keep working when the input debs still live in a sibling nabu-debian checkout
-# (the migration left that repository in place): fall back to it unless the
-# caller pinned NABU_PACKAGES_DIR explicitly.
-if [ -z "${NABU_PACKAGES_DIR:-}" ] && ! ls "$PACKAGES_DIR"/*.deb >/dev/null 2>&1 &&
-	[ -d "$NABU_ROOT/nabu-debian/packages" ]; then
-	PACKAGES_DIR=$NABU_ROOT/nabu-debian/packages
-fi
 
 SUITE=${SUITE:-trixie}
 MIRROR=${MIRROR:-https://mirrors.ustc.edu.cn/debian}
