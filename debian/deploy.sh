@@ -99,6 +99,19 @@ else
 		die "no fastboot device (power off, then hold Vol- while plugging USB)"
 	log "fastboot boot $TWRP_IMG"
 	"$FASTBOOT" boot "$TWRP_IMG"
+	# TWRP does not come up immediately after `fastboot boot`; let the user
+	# confirm (skip the prompt when running non-interactively with -y).
+	if [ "$DEPLOY_YES" != 1 ]; then
+		printf 'fastboot boot sent — press y once the tablet is in TWRP (q to abort): '
+		while :; do
+			read -r ans || die "aborted"
+			case $ans in
+			y | Y | yes | YES) break ;;
+			q | Q | quit | n | N) die "aborted" ;;
+			*) printf 'press y when TWRP is up (q to abort): ' ;;
+			esac
+		done
+	fi
 	log "waiting for TWRP adb..."
 	for _ in $(seq 1 90); do ready && break; sleep 2; done
 	ready || die "no adb device; is the tablet in TWRP?"
