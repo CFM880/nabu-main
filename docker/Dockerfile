@@ -22,6 +22,22 @@ FROM debian:13
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG TARGETARCH
+# Debian mirror host for apt; override with
+#   --build-arg DEBIAN_MIRROR_HOST=<host>
+# (deb.debian.org is slow from CN, so default to USTC).
+ARG DEBIAN_MIRROR_HOST=mirrors.ustc.edu.cn
+
+# Point apt at the mirror before the first update.  Debian 13 ships the deb822
+# sources in /etc/apt/sources.list.d/debian.sources; rewrite the host there
+# (and in the legacy sources.list, if present) so both the host architecture
+# and the arm64 architecture added below come from the same mirror.
+RUN set -eux; \
+	sed -i "s|deb.debian.org|$DEBIAN_MIRROR_HOST|g" \
+		/etc/apt/sources.list.d/debian.sources; \
+	if [ -s /etc/apt/sources.list ]; then \
+		sed -i "s|deb.debian.org|$DEBIAN_MIRROR_HOST|g" /etc/apt/sources.list; \
+	fi; \
+	cat /etc/apt/sources.list.d/debian.sources
 
 # Kernel toolchain + build dependencies.  On arm64, gcc-aarch64-linux-gnu is the
 # native-compiler prefix nabu-main expects; on amd64 it is a cross compiler and

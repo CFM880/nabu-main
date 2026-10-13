@@ -10,6 +10,7 @@
 # Environment:
 #   NABU_PLATFORM  target platform (default: the host's, e.g. linux/amd64)
 #   NABU_IMAGE     image tag        (default: nabu-main-builder:<host arch>)
+#   NABU_DEBIAN_MIRROR_HOST  apt mirror host (default: mirrors.ustc.edu.cn)
 set -euo pipefail
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -26,10 +27,12 @@ esac
 
 platform=${NABU_PLATFORM:-linux/$arch}
 image=${NABU_IMAGE:-nabu-main-builder:$arch}
+mirror_host=${NABU_DEBIAN_MIRROR_HOST:-mirrors.ustc.edu.cn}
 
 exec docker buildx build \
 	--platform "$platform" \
 	--load \
 	--tag "$image" \
+	--build-arg "DEBIAN_MIRROR_HOST=$mirror_host" \
 	--file "$script_dir/Dockerfile" \
 	"$script_dir"
