@@ -78,7 +78,11 @@ else
 endif
 
 debian-clean:
+ifeq ($(DEBIAN_DOCKER),1)
+	./docker/run.sh debian-clean
+else
 	rm -rf debian/work debian/out
+endif
 
 # ---------------------------------------------------------------------------
 # Deploy the built Debian image (host-side; needs adb + fastboot and the

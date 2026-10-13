@@ -68,7 +68,7 @@ done
 debian_action=
 for arg in "$@"; do
 	case "$arg" in
-	debian-img | debian-rootfs | debian-uki) debian_action=$arg ;;
+	debian-img | debian-rootfs | debian-uki | debian-clean) debian_action=$arg ;;
 	esac
 done
 
@@ -120,6 +120,7 @@ if [ -n "$debian_action" ]; then
 	debian-img) inner='./build.sh "$@" && ./make-img.sh' ;;
 	debian-rootfs) inner='./build.sh --rootfs-only "$@"' ;;
 	debian-uki) inner='./build.sh --uki-only "$@"' ;;
+	debian-clean) inner='rm -rf work out' ;;
 	esac
 	docker run \
 		--rm \
@@ -147,7 +148,7 @@ if [ -n "$debian_action" ]; then
 		--env "NABU_USERSPACE_FROM_BUILD=${NABU_USERSPACE_FROM_BUILD:-1}" \
 		--env "TERM=${TERM:-xterm}" \
 		"$image" \
-		bash -c "cd '$nabu_main_dir/debian' && $inner; rc=\$?; chown -R '$host_uid:$host_gid' '$nabu_main_dir/debian/work' '$nabu_main_dir/debian/out' 2>/dev/null || true; exit \$rc" debian "$@"
+		bash -c "cd '$nabu_main_dir/debian' && $inner; rc=\$?; chown -R '$host_uid:$host_gid' '$nabu_main_dir/debian/out' 2>/dev/null || true; exit \$rc" debian "$@"
 	exit 0
 fi
 
