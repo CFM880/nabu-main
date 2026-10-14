@@ -484,6 +484,8 @@ sudo ./deploy.sh --no-rootfs        # 或重新生成 esp.img
 
 - **`linux` 分区会被清空**（刷写/部署时），其中若仍有数据请先备份。
 - Debian 初次开机使用 GDM；默认用户 `nabu` / 密码 `nabu`（务必修改）。
+- 镜像默认安装并启用 `openssh-server`（`ssh.service`），可 `ssh nabu@<ip>` 直接登录
+  （初始密码 `nabu`；复用旧 rootfs 时 `build.sh` 也会补装并 enable）。
 - 无 initramfs：内核直接以 `root=PARTLABEL=linux` 挂载；紧凑 `linux.img` 由
   fstab 的 `x-systemd.growfs` 在首次启动时扩展到分区实际大小。
 - 双引导需要 rodriguezst 的引导补丁（`installer_bootmanager_NOSB.zip`）；没有它时
