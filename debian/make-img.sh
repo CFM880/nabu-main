@@ -20,15 +20,16 @@
 #   out/flash-fastboot.sh   run on a PC: fastboot flash esp/linux + reboot
 #   out/flash.sh            run on the tablet: dd + resize2fs + boot entry
 #
-# Sizes: when the tablet's partitions are visible they are read from lsblk;
-# otherwise the previous out/esp.img size or the defaults/overrides are used.
-# Override with ESP_SIZE/ROOT_SIZE.
+# Sizes: both images are compact.  The FAT image is just big enough for its
+# content, so it stays flashable to any esp partition (override with ESP_SIZE);
+# the ext4 image holds the data and grows to its partition at first boot
+# (override with ROOT_SIZE).
 #
 #   ./make-img.sh                 # both images
 #   ./make-img.sh --esp-only
 #   ./make-img.sh --linux-only
 #   ./make-img.sh --no-dualboot   # plain UKI-only ESP (no rEFInd)
-#   ESP_SIZE=1073741824 ./make-img.sh --esp-only
+#   ESP_SIZE=350105600 ./make-img.sh --esp-only   # pin the size instead of compact
 #
 # The ext4 image is assembled unprivileged with mkfs.ext4 -d (e2fsprogs >=
 # 1.47).  The FAT image is populated with mcopy (mtools) or a loop mount.
@@ -51,11 +52,10 @@ fi
 HERE=$(cd -- "$(dirname -- "$0")" && pwd)
 OUT=$HERE/out
 
-# ESP: use the real partition size when we can read it, else keep whatever the
-# previous out/esp.img used, else the 1 GiB the upstream nabu guides assume.
+# ESP: a compact FAT32 image just big enough for its content (override with
+# ESP_SIZE).  ESP_MIN is the smallest FAT32 image worth building.
 ESP_SIZE=${ESP_SIZE:-}
 ESP_MIN=${ESP_MIN:-67108864}      # 64 MiB minimum for the ESP image
-ESP_DEFAULT=${ESP_DEFAULT:-1073741824}   # 1 GiB default
 # Root: compact image target; grows to the partition at flash time.
 ROOT_SIZE=${ROOT_SIZE:-}
 ROOT_DEFAULT=${ROOT_DEFAULT:-0}   # 0 => auto: data + 2 GiB headroom, aligned
@@ -122,32 +122,17 @@ log() { printf '\033[1;34m[nabu-img]\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31m[nabu-img] error:\033[0m %s\n' "$*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || die "$1 not found ($2)"; }
 
-part_size() {
-	# bytes for the first existing device among the arguments, else empty
-	local d
-	for d in "$@"; do
-		if [ -b "$d" ] || [ -e "$d" ]; then
-			lsblk -bndo SIZE "$(readlink -f "$d")" 2>/dev/null && return 0
-		fi
-	done
-	return 1
-}
-
-resolve_esp_size() {
-	if [ -n "$ESP_SIZE" ]; then return; fi
-	if ESP_SIZE=$(part_size "$ESP_PART"); then
-		log "esp partition size: $ESP_SIZE bytes"
-		# use the partition size but never less than the minimum
-		[ "$ESP_SIZE" -lt "$ESP_MIN" ] && ESP_SIZE=$ESP_MIN
-	elif [ -f "$OUT/esp.img" ]; then
-		# keep the size of the image we produced before (it was made to fit
-		# the tablet's esp); a re-run must not silently change it
-		ESP_SIZE=$(stat -c %s "$OUT/esp.img")
-		log "esp partition not visible; keeping previous esp.img size $ESP_SIZE bytes"
-	else
-		ESP_SIZE=$ESP_DEFAULT
-		log "esp partition not visible; using default $ESP_SIZE bytes"
-	fi
+# Compact FAT32 image size for the staged ESP content: the files plus ~25% and
+# 4 MiB slack, rounded up to 1 MiB, never below ESP_MIN.  Unlike the ext4
+# rootfs, FAT is not grown at boot, so the image is kept just big enough to fit
+# its content and stays flashable to any esp partition.
+compact_esp_size() {
+	local root=$1 content size
+	content=$(du -sb "$root" | cut -f1)
+	size=$(( content + content / 4 + 4 * 1024 * 1024 ))
+	size=$(( (size + 1048575) / 1048576 * 1048576 ))
+	[ "$size" -lt "$ESP_MIN" ] && size=$ESP_MIN
+	printf '%s\n' "$size"
 }
 
 # Build a compact ext4 image and report the minimum partition size it needs.
@@ -253,8 +238,7 @@ PY
 
 build_esp() {
 	local img=$OUT/esp.img root=$HERE/work/esp-root
-	resolve_esp_size
-	log "build ESP image $img ($ESP_SIZE bytes)"
+	log "build ESP image $img"
 	need mkfs.fat "dosfstools"
 	[ -f "$OUT/nabu-debian.efi" ] || die "missing $OUT/nabu-debian.efi (run build.sh --uki-only)"
 
@@ -275,6 +259,13 @@ build_esp() {
 	fi
 
 	cp -a "$OUT/nabu-debian.efi" "$root/$UKI_REL"
+
+	if [ -n "$ESP_SIZE" ]; then
+		log "ESP size: $ESP_SIZE bytes (ESP_SIZE)"
+	else
+		ESP_SIZE=$(compact_esp_size "$root")
+		log "ESP size: $ESP_SIZE bytes (compact; content $(du -sb "$root" | cut -f1) bytes)"
+	fi
 
 	mkdir -p "$OUT"
 	rm -f "$img"

@@ -197,11 +197,12 @@ sudo ./deploy.sh --yes    # 免确认
 ./make-img.sh --esp-only
 ./make-img.sh --linux-only
 ./make-img.sh --no-dualboot      # ESP 只放 Debian UKI（不做 Android 双引导）
-ESP_SIZE=1073741824 ./make-img.sh --esp-only   # 覆盖 esp 镜像大小（字节）
+ESP_SIZE=350105600 ./make-img.sh --esp-only   # 固定 esp 镜像大小（字节；默认按内容紧凑生成）
 ```
 
-- `out/esp.img`：FAT32、卷标 `ESPNABU`（若能看到平板 `esp` 分区则用其实际大小，
-  否则沿用上一次 `out/esp.img` 的大小）。**默认做成双引导**，内容与其他 nabu 发行版一致：
+- `out/esp.img`：FAT32、卷标 `ESPNABU`，**按内容紧凑生成**（当前约 64 MiB，只比文件大一点），
+  所以能刷进任何足够大的 `esp` 分区；要固定大小用 `ESP_SIZE=<字节>`。**默认做成双引导**，
+  内容与其他 nabu 发行版一致：
   - `EFI/BOOT/bootaa64.efi`：rEFInd（菜单由 `config/refind.conf` 定义）；
   - `EFI/BOOT/drivers_aa64/`、`icons/`、`themes/`、`vars/`；
   - `EFI/Android/Reboot2Android.efi`：菜单里的 “Reboot to Android”；
@@ -727,8 +728,9 @@ sudo ./deploy.sh --no-rootfs        # 或重新生成 esp.img
   未处于异常状态。
 - `make-img.sh` 报 `dual-boot EFI payload not found`：确认 `boot/nabu-dualboot-efi.zip`
   存在，或运行 `./fetch-efi.sh`，或用 `--no-dualboot` 生成单系统 ESP。
-- `fastboot flash esp` 失败 / 报分区太小：`out/esp.img` 比设备 `esp` 分区大。用
-  `ESP_SIZE=<esp分区字节> ./make-img.sh --esp-only` 重新生成。
+- `fastboot flash esp` 失败 / 报分区太小：`out/esp.img` 比设备 `esp` 分区大（老版本默认
+  1 GiB）。现在 `esp.img` 默认按内容紧凑生成（约 64 MiB），重新 `./make-img.sh --esp-only`
+  即可；要固定大小用 `ESP_SIZE=<esp分区字节> ./make-img.sh --esp-only`。
 - 启动项创建失败：确认 `efibootmgr` 可用且 ESP 为 `PARTLABEL=esp`；也可在 rEFInd 里
   直接启动，或在 UEFI Shell 里手动 `fs0:` → `\EFI\BOOT\bootaa64.efi`。
 - `--uki-only` 报 `ModuleNotFoundError: No module named 'pefile'`：当前 PATH 的 `python3`
