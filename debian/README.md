@@ -44,6 +44,7 @@ and `debian/out` are reused. Force a fresh build with `make debian-clean` or
 | `build.sh` | rootfs (mmdebstrap) + optional input debs + `out/nabu-debian.efi` |
 | `make-img.sh` | `out/esp.img` / `out/linux.img` / `out/EFI.zip` + `flash*.sh` (uses fakeroot) |
 | `deploy.sh` | TWRP + fastboot deploy of the UKI/rootfs (single-system path) |
+| `flash-esp.sh` | detect the esp partition size (fastboot), rebuild `out/esp.img` to it, flash |
 | `fetch-efi.sh` | refresh `boot/nabu-dualboot-efi.zip` from the pinned releases |
 | `capture-serial.sh`, `serial_cmd.py` | USB CDC-ACM console capture / scripted console |
 | `repair-ownership.sh` | one-off rootfs ownership repair |

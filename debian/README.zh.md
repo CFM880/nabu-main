@@ -230,6 +230,15 @@ fastboot devices
 fastboot reboot
 ```
 
+`esp.img` 默认是紧凑的（约 64 MiB，只比内容大一点）。若想让它**铺满整个 esp 分区**
+（后续能手动放更多引导项），先探测分区大小、按该大小重建、再刷：
+
+```sh
+debian/flash-esp.sh            # = fastboot getvar partition-size:esp -> 重建 -> flash esp
+# 或：make debian-flash-esp
+# 只重建不刷：debian/flash-esp.sh --no-flash
+```
+
 > 分区名可用 `FB_ESP_PART` / `FB_ROOT_PART` 覆盖；两者默认都跟随构建时的 `NABU_LABEL`
 > （未设置时为 `linux`），这样 `root=PARTLABEL=$NABU_LABEL`（cmdline/fstab）与
 > `fastboot flash` 的目标始终是同一个分区，不会写错。**本机当前按 `NABU_LABEL=debian`

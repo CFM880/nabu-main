@@ -5,7 +5,7 @@ PRODUCT ?= production
 NABU    := ./scripts/nabu
 .DEFAULT_GOAL := all
 
-.PHONY: all discover apply compose config build collect package verify install install-modules rollback clean distclean debian-img debian-rootfs debian-uki debian-clean debian-repair-ownership deploy deploy-flash
+.PHONY: all discover apply compose config build collect package verify install install-modules rollback clean distclean debian-img debian-rootfs debian-uki debian-clean debian-repair-ownership debian-flash-esp deploy deploy-flash
 
 # ---------------------------------------------------------------------------
 # Pipeline stages (discover -> ... -> verify) always run inside the build
@@ -122,3 +122,8 @@ FB_ROOT_PART ?= linux
 deploy-flash:
 	fastboot flash $(FB_ROOT_PART) debian/out/linux.img
 	fastboot reboot
+
+# Rebuild out/esp.img to the tablet's esp partition size, then flash it
+# (host-side; needs fastboot and the tablet's USB, tablet in fastboot mode).
+debian-flash-esp:
+	debian/flash-esp.sh $(ESP_ARGS)
