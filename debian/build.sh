@@ -647,6 +647,27 @@ EOF
 	chroot "$ROOTFS" systemctl enable qrtr-ns.service rmtfs.service \
 		tqftpserv.service >/dev/null 2>&1 || true
 
+	# --- SSH: headless access over WiFi --------------------------------------
+	# packages.list installs openssh-server on a fresh rootfs and customize.sh
+	# enables ssh.service, but a reused rootfs tree predates both, so install
+	# and enable it here as well (same network trick as the modem packages).
+	if ! chroot "$ROOTFS" dpkg-query -W -f='${Status}' openssh-server 2>/dev/null |
+		grep -q 'install ok installed'; then
+		log "installing openssh-server (headless WiFi access)"
+		if [ -e "$ROOTFS/etc/resolv.conf" ] || [ -L "$ROOTFS/etc/resolv.conf" ]; then
+			mv "$ROOTFS/etc/resolv.conf" "$ROOTFS/etc/resolv.conf.nabu-save"
+		fi
+		cp -f /etc/resolv.conf "$ROOTFS/etc/resolv.conf" 2>/dev/null || true
+		chroot "$ROOTFS" apt-get update -qq >/dev/null 2>&1 || true
+		chroot "$ROOTFS" apt-get install -y --no-install-recommends \
+			openssh-server >/dev/null 2>&1 ||
+			log "warning: could not install openssh-server (use --rebuild-rootfs)"
+		rm -f "$ROOTFS/etc/resolv.conf"
+		[ -e "$ROOTFS/etc/resolv.conf.nabu-save" ] &&
+			mv "$ROOTFS/etc/resolv.conf.nabu-save" "$ROOTFS/etc/resolv.conf"
+	fi
+	chroot "$ROOTFS" systemctl enable ssh.service >/dev/null 2>&1 || true
+
 	# --- WCN3990 WLAN DSP image: also expose it under the ath10k tree --------
 	# The image ships qcom/sm8150/xiaomi/nabu/wlanmdsp.mbn; some WCN3990
 	# firmware loaders look for it as ath10k/WCN3990/hw1.0/wlanmdsp.mbn too.
