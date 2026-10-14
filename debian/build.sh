@@ -693,9 +693,10 @@ EOF
 				mv "$ROOTFS/etc/resolv.conf.nabu-save" "$ROOTFS/etc/resolv.conf"
 		fi
 		# A pre-created placeholder account makes GDM skip the wizard; drop it.
+		# (userdel -r, not deluser: the latter needs /proc, absent in the chroot.)
 		if chroot "$ROOTFS" id "$USERNAME" >/dev/null 2>&1; then
 			log "removing the pre-created $USERNAME account (first-boot wizard)"
-			chroot "$ROOTFS" deluser --remove-home "$USERNAME" >/dev/null 2>&1 || true
+			chroot "$ROOTFS" userdel -r "$USERNAME" >/dev/null 2>&1 || true
 		fi
 	fi
 	# Groups the wizard-created user needs (GPU/audio/input); idempotent.
