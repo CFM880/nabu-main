@@ -72,6 +72,8 @@ HOSTNAME=${NABU_HOSTNAME:-nabu-debian}
 USERNAME=${NABU_USER:-nabu}
 PASSWORD=${NABU_PASSWORD:-nabu}
 LABEL=${NABU_LABEL:-linux}
+# 1 = no user is pre-created; GDM runs gnome-initial-setup on first boot.
+INITIAL_SETUP=${NABU_INITIAL_SETUP:-1}
 
 ART=$MAIN/artifacts/$PRODUCT
 case $PRODUCT in
@@ -415,6 +417,7 @@ build_rootfs() {
 
 	export NABU_HOSTNAME=$HOSTNAME NABU_USER=$USERNAME
 	export NABU_PASSWORD=$PASSWORD NABU_LABEL=$LABEL
+	export NABU_INITIAL_SETUP=$INITIAL_SETUP
 
 	mmdebstrap \
 		$verbose \
@@ -667,6 +670,43 @@ EOF
 			mv "$ROOTFS/etc/resolv.conf.nabu-save" "$ROOTFS/etc/resolv.conf"
 	fi
 	chroot "$ROOTFS" systemctl enable ssh.service >/dev/null 2>&1 || true
+
+	# --- first-boot account wizard (gnome-initial-setup) ---------------------
+	# A fresh rootfs gets gnome-initial-setup from packages.list and skips the
+	# pre-created user in customize.sh; do the same for a reused rootfs, so GDM
+	# runs the wizard (InitialSetupEnable defaults to true with no user).  Set
+	# NABU_INITIAL_SETUP=0 to keep the pre-created account instead.
+	if [ "$INITIAL_SETUP" != 0 ] && [ "$INITIAL_SETUP" != no ]; then
+		if ! chroot "$ROOTFS" dpkg-query -W -f='${Status}' gnome-initial-setup 2>/dev/null |
+			grep -q 'install ok installed'; then
+			log "installing gnome-initial-setup (first-boot account wizard)"
+			if [ -e "$ROOTFS/etc/resolv.conf" ] || [ -L "$ROOTFS/etc/resolv.conf" ]; then
+				mv "$ROOTFS/etc/resolv.conf" "$ROOTFS/etc/resolv.conf.nabu-save"
+			fi
+			cp -f /etc/resolv.conf "$ROOTFS/etc/resolv.conf" 2>/dev/null || true
+			chroot "$ROOTFS" apt-get update -qq >/dev/null 2>&1 || true
+			chroot "$ROOTFS" apt-get install -y --no-install-recommends \
+				gnome-initial-setup >/dev/null 2>&1 ||
+				log "warning: could not install gnome-initial-setup (use --rebuild-rootfs)"
+			rm -f "$ROOTFS/etc/resolv.conf"
+			[ -e "$ROOTFS/etc/resolv.conf.nabu-save" ] &&
+				mv "$ROOTFS/etc/resolv.conf.nabu-save" "$ROOTFS/etc/resolv.conf"
+		fi
+		# A pre-created placeholder account makes GDM skip the wizard; drop it.
+		if chroot "$ROOTFS" id "$USERNAME" >/dev/null 2>&1; then
+			log "removing the pre-created $USERNAME account (first-boot wizard)"
+			chroot "$ROOTFS" deluser --remove-home "$USERNAME" >/dev/null 2>&1 || true
+		fi
+	fi
+	# Groups the wizard-created user needs (GPU/audio/input); idempotent.
+	if ! grep -q '^EXTRA_GROUPS="video render audio input plugdev netdev"' \
+		"$ROOTFS/etc/adduser.conf" 2>/dev/null; then
+		{
+			echo '# nabu: groups the first (wizard-created) user needs.'
+			echo 'ADD_EXTRA_GROUPS=1'
+			echo 'EXTRA_GROUPS="video render audio input plugdev netdev"'
+		} >>"$ROOTFS/etc/adduser.conf"
+	fi
 
 	# --- WCN3990 WLAN DSP image: also expose it under the ath10k tree --------
 	# The image ships qcom/sm8150/xiaomi/nabu/wlanmdsp.mbn; some WCN3990

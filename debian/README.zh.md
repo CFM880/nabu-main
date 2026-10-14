@@ -136,8 +136,9 @@ sudo ./build.sh --clean           # 清空 work/ 与 out/ 后重建
 | `PKG_BASE_VERSION` | `7.2.7-1` | 固件/用户态包版本 |
 | `FIRMWARE_VERSION` / `USERSPACE_VERSION` / `MODULES_VERSION` | 见上 | 各输入包版本 |
 | `NABU_HOSTNAME` | `nabu-debian` | 主机名 |
-| `NABU_USER` | `nabu` | 第一个用户（uid 1000，加入 sudo） |
-| `NABU_PASSWORD` | `nabu` | 初始密码（**首次登录后请修改**） |
+| `NABU_INITIAL_SETUP` | `1` | `1`=不预建用户，首次开机 GDM 跑 `gnome-initial-setup` 让你自己建号；`0`=按下面两项预建 |
+| `NABU_USER` | `nabu` | 仅在 `NABU_INITIAL_SETUP=0` 时预建的第一个用户（uid 1000，加入 sudo） |
+| `NABU_PASSWORD` | `nabu` | 同上，初始密码 |
 | `NABU_LABEL` | `linux` | 根分区 PARTLABEL |
 
 镜像构建流程：
@@ -483,7 +484,10 @@ sudo ./deploy.sh --no-rootfs        # 或重新生成 esp.img
 ## 已知事项 / 注意
 
 - **`linux` 分区会被清空**（刷写/部署时），其中若仍有数据请先备份。
-- Debian 初次开机使用 GDM；默认用户 `nabu` / 密码 `nabu`（务必修改）。
+- **首次开机是 GNOME 建号向导**（`gnome-initial-setup`）：默认不预建用户，GDM 让你自己设
+  用户名/密码；设备组（`video/render/audio/input/plugdev/netdev`）由 `/etc/adduser.conf`
+  在向导建号时一并加入。想改成预建固定账号（无向导）用 `NABU_INITIAL_SETUP=0`
+  （账号 `NABU_USER`/`NABU_PASSWORD`，默认 `nabu`/`nabu`）。
 - 镜像默认安装并启用 `openssh-server`（`ssh.service`），可 `ssh nabu@<ip>` 直接登录
   （初始密码 `nabu`；复用旧 rootfs 时 `build.sh` 也会补装并 enable）。
 - 无 initramfs：内核直接以 `root=PARTLABEL=linux` 挂载；紧凑 `linux.img` 由

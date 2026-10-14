@@ -20,6 +20,8 @@ hostname=${NABU_HOSTNAME:-nabu-debian}
 user=${NABU_USER:-nabu}
 password=${NABU_PASSWORD:-nabu}
 label=${NABU_LABEL:-linux}
+# 1 = no user is pre-created; GDM runs gnome-initial-setup on first boot.
+initial_setup=${NABU_INITIAL_SETUP:-1}
 
 [ -d "$root/etc" ] || {
 	echo "customize-hook: $root does not look like a rootfs" >&2
@@ -58,15 +60,28 @@ if [ -f "$root/etc/locale.gen" ]; then
 fi
 
 # --- user -----------------------------------------------------------------
-if ! chroot "$root" id "$user" >/dev/null 2>&1; then
-	chroot "$root" useradd --create-home --shell /bin/bash --groups sudo "$user"
-	# add whichever supplementary groups this suite actually defines
-	for group in adm cdrom video render audio input plugdev netdev; do
-		if chroot "$root" getent group "$group" >/dev/null 2>&1; then
-			chroot "$root" usermod --append --groups "$group" "$user"
-		fi
-	done
-	echo "$user:$password" | chroot "$root" chpasswd
+# adduser.conf drives the account gnome-initial-setup creates: the tablet
+# needs these groups for GPU (render/video), sound (audio) and touch/input.
+{
+	echo '# nabu: groups the first (wizard-created) user needs.'
+	echo 'ADD_EXTRA_GROUPS=1'
+	echo 'EXTRA_GROUPS="video render audio input plugdev netdev"'
+} >>"$root/etc/adduser.conf"
+
+# By default no account is pre-created, so GDM runs gnome-initial-setup and the
+# owner picks their own name/password.  Set NABU_INITIAL_SETUP=0 to pre-create
+# the NABU_USER/NABU_PASSWORD account instead (headless/automation).
+if [ "$initial_setup" = 0 ] || [ "$initial_setup" = no ]; then
+	if ! chroot "$root" id "$user" >/dev/null 2>&1; then
+		chroot "$root" useradd --create-home --shell /bin/bash --groups sudo "$user"
+		# add whichever supplementary groups this suite actually defines
+		for group in adm cdrom video render audio input plugdev netdev; do
+			if chroot "$root" getent group "$group" >/dev/null 2>&1; then
+				chroot "$root" usermod --append --groups "$group" "$user"
+			fi
+		done
+		echo "$user:$password" | chroot "$root" chpasswd
+	fi
 fi
 
 # --- services -------------------------------------------------------------

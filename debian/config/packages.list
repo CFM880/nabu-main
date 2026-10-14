@@ -6,6 +6,9 @@
 task-gnome-desktop
 gnome-tweaks
 gnome-software
+# First-boot wizard: with no pre-created user, GDM runs gnome-initial-setup so
+# the owner creates their own account (see NABU_INITIAL_SETUP).
+gnome-initial-setup
 sudo
 network-manager
 # SSH: the tablet is normally driven headless over WiFi, so ship sshd and
