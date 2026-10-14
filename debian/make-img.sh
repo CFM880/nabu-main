@@ -52,6 +52,23 @@ fi
 HERE=$(cd -- "$(dirname -- "$0")" && pwd)
 OUT=$HERE/out
 
+# Staging dirs live in $TMPDIR, not work/: a privileged container build makes
+# work/ root-owned, and make-img.sh usually runs as the desktop user, which
+# then cannot remove a stale work/ staging tree.
+TMP_DIRS=""
+cleanup_tmp_dirs() {
+	local d
+	for d in $TMP_DIRS; do rm -rf "$d"; done
+}
+trap cleanup_tmp_dirs EXIT
+
+# new_stage_dir NAME -> sets $STAGE_DIR to a fresh temp dir.  A function rather
+# than a command substitution, so TMP_DIRS is updated in this shell.
+new_stage_dir() {
+	STAGE_DIR=$(mktemp -d "${TMPDIR:-/tmp}/$1.XXXXXX")
+	TMP_DIRS="$TMP_DIRS $STAGE_DIR"
+}
+
 # ESP: a compact FAT32 image just big enough for its content (override with
 # ESP_SIZE).  ESP_MIN is the smallest FAT32 image worth building.
 ESP_SIZE=${ESP_SIZE:-}
@@ -149,10 +166,10 @@ build_root() {
 	done
 	[ -n "${tar:-}" ] || die "no rootfs tarball in $OUT (run build.sh first)"
 
-	stage=$HERE/work/root-stage
+	new_stage_dir nabu-root
+	stage=$STAGE_DIR
 	mkdir -p "$OUT"
-	rm -rf "$stage" "$img"
-	mkdir -p "$stage"
+	rm -f "$img"
 	case $tar in
 	*.zst) zstd -dc "$tar" | tar -C "$stage" --numeric-owner -xpf - ;;
 	*.gz) tar -C "$stage" --numeric-owner -xzpf "$tar" ;;
@@ -237,12 +254,14 @@ PY
 }
 
 build_esp() {
-	local img=$OUT/esp.img root=$HERE/work/esp-root
+	local img=$OUT/esp.img root
 	log "build ESP image $img"
 	need mkfs.fat "dosfstools"
 	[ -f "$OUT/nabu-debian.efi" ] || die "missing $OUT/nabu-debian.efi (run build.sh --uki-only)"
 
-	rm -rf "$root"
+	# Stage in a private temp dir (see new_stage_dir): work/ may be root-owned.
+	new_stage_dir nabu-esp
+	root=$STAGE_DIR
 	install -d -m0755 "$root/EFI/debian"
 
 	if [ "$DUALBOOT" -eq 1 ]; then
