@@ -9,7 +9,7 @@ image   = true
 dtb     = "sm8150-xiaomi-nabu-production.dtb"
 cmdline = "config/production.cmdline"
 # Drop the broken EFI RTC so rtc-pm8xxx owns /dev/rtc0 (hctosys + timedatectl).
-kernel_config = ["config/sm8150.config", "config/nabu-rtc.config"]
+kernel_config = ["config/sm8150.config", "config/nabu-rtc.config", "config/nabu-debug.config"]
 sbat    = "config/uki.sbat"
 uki     = "nabu-production.efi"
 
