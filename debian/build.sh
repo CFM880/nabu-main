@@ -350,6 +350,55 @@ stage_userspace_tree() {
 		install -m0644 "$mod/DEVELOPMENT.md" \
 			"$stage/usr/local/share/doc/nabu-accelerometer/DEVELOPMENT.md"
 	fi
+
+	# Everything else the sibling modules declare for the rootfs (their
+	# nabu-module.toml [install] targets outside the kernel module tree) is
+	# staged generically from those contracts, so no module has to be named
+	# here.  This is what brings in, for instance, the iris VA-API driver in
+	# /usr/lib/aarch64-linux-gnu/dri, its /etc/modprobe.d options and udev
+	# rules, or the camera's libcamera IPA configs.
+	stage_module_install_entries "$stage"
+}
+
+# Stage the sibling modules' [install] entries that belong in the rootfs.
+stage_module_install_entries() {
+	local stage=$1
+	python3 - "$NABU_ROOT" "$stage" <<'PY'
+import shutil, sys, tomllib
+from pathlib import Path
+
+root, stage = Path(sys.argv[1]), Path(sys.argv[2])
+SKIP = ("/lib/modules/", "/lib/firmware/")
+
+
+def source_for(moddir, key, artifacts):
+	what = artifacts.get(key)
+	if what is None:
+		return moddir / key
+	if what.startswith("module:"):
+		return moddir / what[len("module:"):]
+	if what.startswith("out:"):
+		# Kernel build output; installed below /lib/modules separately.
+		return None
+	return moddir / what
+
+
+for toml in sorted(root.glob("*/nabu-module.toml")):
+	with open(toml, "rb") as handle:
+		data = tomllib.load(handle)
+	artifacts = data.get("artifacts", {}) or {}
+	for key, target in (data.get("install", {}) or {}).items():
+		if any(target.startswith(prefix) for prefix in SKIP):
+			continue
+		src = source_for(toml.parent, key, artifacts)
+		if src is None or not src.is_file():
+			continue
+		dst = stage / target.lstrip("/")
+		if dst.exists():
+			continue
+		dst.parent.mkdir(parents=True, exist_ok=True)
+		shutil.copy2(src, dst)
+PY
 }
 
 build_userspace_deb() {
@@ -829,6 +878,12 @@ EOF
 		"$ROOTFS/usr/share/libcamera/ipa/simple/"
 
 	install -d -m0700 "$ROOTFS/var/lib/tqftpserv/sensors/registry"
+
+	# Pick up anything else the sibling modules declare for the rootfs but
+	# that is not listed above -- for instance the iris VA-API driver in
+	# /usr/lib/aarch64-linux-gnu/dri.  Files that already exist are left
+	# alone, so the explicit installs above keep winning.
+	stage_module_install_entries "$ROOTFS"
 }
 
 # Fail loudly if the rootfs ownership is not root — e.g. an external chown
