@@ -698,7 +698,7 @@ def build_parser() -> argparse.ArgumentParser:
     for name in ("discover", "apply", "compose", "config", "build",
                  "collect", "package", "install", "rollback", "verify", "all"):
         cmd = sub.add_parser(name)
-        if name == "apply":
+        if name in ("apply", "all"):
             cmd.add_argument("--no-reset", action="store_true")
         if name == "install":
             cmd.add_argument("--no-uki", action="store_true",

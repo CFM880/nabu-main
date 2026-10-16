@@ -1,33 +1,37 @@
 # USB serial debug console
 
 `nabu-debian` gets its kernel from the `production` product (default
-`KERNEL_RELEASE=6.14.11-nabu-full`), which builds in the legacy CDC-ACM gadget
-(`CONFIG_USB_G_SERIAL=y`, see `nabu-main/config/nabu-usb-console.config`).  The
-kernel therefore creates `ttyGS0` by itself at boot, **with no userspace service
-and no configfs setup**, but the UKI command line does **not** carry `console=ttyGS0` any more
-(removed 2026-10-08 — only `console=tty0` remains, and `ignore_loglevel` is gone
-too).  Kernel printk therefore never reaches the serial port: the previous
-setup flooded it with `ignore_loglevel` + `ath10k_snoc: chan info: invalid
-frequency 0 (idx 41 out of bounds)` (~189 lines per boot), which pushed
-`serial_cmd.py`'s first login off the prompt.  Log in and run `dmesg` for the
-complete early-boot ring buffer: `console=` only picks the *output*, printk
-always records to the ring buffer.
+`KERNEL_RELEASE=6.14.11-nabu-full`).  That kernel enables the **configfs**
+CDC-ACM function (`CONFIG_USB_CONFIGFS_ACM=y`) but **not** the legacy
+`CONFIG_USB_G_SERIAL`, so `/dev/ttyGS0` is only created once userspace builds
+the configfs gadget.  `nabu-platform` ships `nabu-usb-console.sh` +
+`nabu-usb-console.service` (enabled at `multi-user.target`) to do exactly that,
+and `config/debian.cmdline` carries `console=tty0 console=ttyGS0`, so kernel
+printk goes to the serial port as well as the panel.
 
-## On the tablet (login getty removed 2026-10-13)
+The ttyGS console carries `CON_PRINTBUFFER`: the whole boot ring buffer is
+replayed as soon as the gadget is created, so a hang that happens before USB
+comes up is still visible.
 
-- The kernel gadget (legacy `g_serial`) defaults to `use_acm=1` and binds as
-  soon as the USB device controller is in device role.  `/dev/ttyGS0` only
-  appears once a USB **host** has enumerated the gadget, though.
-- `serial-getty@ttyGS0.service` is **not** enabled any more.  It used to be
-  symlinked into `getty.target.wants`, which made systemd wait for
-  `dev-ttyGS0.device` for the full 90 s device timeout on every boot without a
-  host cable; that stalled `multi-user.target` → `hexagonrpcd` → the SSC sensor
-  proxy and broke auto-rotation until a re-login.  To get a serial login
-  anyway, plug in a host and start it on demand:
+## On the tablet
+
+- `nabu-usb-console.service` binds the `acm.usb0` function to the first UDC and
+  exits; `/dev/ttyGS0` then appears (and the host sees `/dev/ttyACM*`).
+- `serial-getty@ttyGS0.service` is **masked** (`/etc/systemd/system/
+  serial-getty@ttyGS0.service -> /dev/null`).  `console=ttyGS0` would otherwise
+  make systemd-start the generator's getty, and because ttyGS0 only appears
+  once a host enumerates the gadget, its `dev-ttyGS0.device` dependency stalled
+  `multi-user.target` for the full 90 s device timeout on every boot without a
+  host cable (which in turn stalled `hexagonrpcd` → the SSC sensor proxy).  For
+  a serial *login* while a host is attached anyway:
   ```sh
   sudo systemctl start serial-getty@ttyGS0.service
   ```
-- No `nabu-usb-console.service` / configfs helper is installed.
+- The USB-C port is forced to **device role** on this debug build
+  (`&usb_1_dwc3 { dr_mode = "peripheral"; }` in `nabu-platform`), because the
+  mainline `pm8150b` TCPM and the downstream `qcom_pmi8998_charger` both drive
+  the PM8150B Type-C power-role register and otherwise leave the port as host.
+  The port therefore cannot act as an OTG host while this is set.
 
 ## On the host PC
 
@@ -38,28 +42,17 @@ dmesg | tail            # cdc_acm 1-1:1.0: ttyACM0: USB ACM device
 ls /dev/ttyACM*
 ```
 
-The gadget presents NetChip ids `0525:a4a7` ("Gadget Serial v2.4").  Then read
-the log / log in (user `nabu`, password `nabu` by default):
+The gadget presents the Linux Foundation ids `1d6b:0104`.  Then read the kernel
+console (the whole boot log is replayed):
 
 ```sh
 sudo chmod a+rw /dev/ttyACM0   # or add yourself to the dialout group
 picocom -b 115200 /dev/ttyACM0 # or: screen /dev/ttyACM0 115200
 ```
 
-By default nothing is printed on the serial port until you log in: run `dmesg`
-in the serial getty for the complete early-boot log (the ring buffer records
-everything regardless of `console=`).
-
-To watch a boot live, put `console=ttyGS0` (after `console=tty0`) back into
-`config/debian.cmdline`, rebuild with `./build.sh --uki-only` and refresh
-`\EFI\debian\nabu-debian.efi` on the ESP.  The ttyGS console carries
-`CON_PRINTBUFFER`, so the whole boot ring buffer is replayed as soon as the
-gadget is created and a hang from before USB came up stays visible.
-
 `debian/capture-serial.sh` (in this repository) captures the console for long
 runs: it auto-detects the gadget, reconnects after a reboot or re-plug, and
-keeps appending to one log until Ctrl-C (with the default command line it
-captures the login/interactive session, not the boot log):
+keeps appending to one log until Ctrl-C:
 
 ```sh
 ./capture-serial.sh -t -o nabu-boot.log
@@ -67,10 +60,8 @@ captures the login/interactive session, not the boot log):
 
 ## If it never enumerates
 
-- The USB-C port is forced to **device role** on this debug build
-  (`&usb_1_dwc3 { dr_mode = "peripheral"; }` in `nabu-platform`), because the
-  mainline `pm8150b` TCPM and the downstream `qcom_pmi8998_charger` both drive
-  the PM8150B Type-C power-role register and otherwise leave the port as host.
-  The USB-C port therefore cannot act as an OTG host while this is set.
-- Make sure the UKI was rebuilt from a kernel built with both
-  `CONFIG_USB_G_SERIAL=y` and the peripheral-mode DTB above.
+- Make sure the USB-C port is connected to the PC as a **device** (it is forced
+  to peripheral mode on this build) and that the UKI was rebuilt from a kernel
+  with `CONFIG_USB_CONFIGFS_ACM=y` and the peripheral-mode DTB above.
+- Check the gadget service ran: `systemctl status nabu-usb-console.service` and
+  `ls /sys/kernel/config/usb_gadget/nabu-console`.

@@ -78,10 +78,19 @@ INITIAL_SETUP=${NABU_INITIAL_SETUP:-1}
 ART=$MAIN/artifacts/$PRODUCT
 case $PRODUCT in
 production-7.2) DTB_NAME=${DTB_NAME:-sm8150-xiaomi-nabu-production-7.2.dtb} ;;
+serial-debug) DTB_NAME=${DTB_NAME:-sm8150-xiaomi-nabu-serial-debug.dtb} ;;
 *) DTB_NAME=${DTB_NAME:-sm8150-xiaomi-nabu-production.dtb} ;;
 esac
 
-MODULES="nabu-platform nabu-display nabu-touchscreen nabu-iris nabu-camera nabu-audio nabu-accelerometer nabu-power"
+# The serial-debug product drops nabu-power (the PM8150B SMB5 + LN8000 chargers)
+# so the USB-C port stays free for the nabu-serial console gadget; every other
+# product keeps the charging stack.
+case $PRODUCT in
+serial-debug) HAVE_POWER=0 ;;
+*) HAVE_POWER=1 ;;
+esac
+
+MODULES="nabu-platform nabu-display nabu-touchscreen nabu-iris nabu-camera nabu-audio nabu-accelerometer nabu-power nabu-serial"
 
 log() { printf '\033[1;34m[nabu-debian]\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31m[nabu-debian] error:\033[0m %s\n' "$*" >&2; exit 1; }
@@ -540,7 +549,9 @@ overlay_nabu_userspace() {
 		"$ROOTFS/usr/share/libcamera/ipa/simple"
 
 	install -m0644 "$m/nabu-iris/system/qcom-iris-autoload.service" "$etc/systemd/system/"
-	install -m0644 "$m/nabu-power/system/ln8000-autoload.service" "$etc/systemd/system/"
+	if [ "$HAVE_POWER" = 1 ]; then
+		install -m0644 "$m/nabu-power/system/ln8000-autoload.service" "$etc/systemd/system/"
+	fi
 	install -m0644 "$m/nabu-accelerometer/config/nabu-tablet-mode.service" "$etc/systemd/system/"
 	install -m0644 "$m/nabu-accelerometer/config/nabu-sensors-suspend.service" "$etc/systemd/system/"
 	install -m0644 "$m/nabu-accelerometer/config/nabu-sensors-resume.service" "$etc/systemd/system/"
@@ -557,7 +568,9 @@ overlay_nabu_userspace() {
 		install -d -m0755 "$etc/systemd/system/$w.wants"
 	done
 	ln -sf ../qcom-iris-autoload.service "$etc/systemd/system/multi-user.target.wants/"
-	ln -sf ../ln8000-autoload.service "$etc/systemd/system/multi-user.target.wants/"
+	if [ "$HAVE_POWER" = 1 ]; then
+		ln -sf ../ln8000-autoload.service "$etc/systemd/system/multi-user.target.wants/"
+	fi
 	ln -sf ../nabu-tablet-mode.service "$etc/systemd/system/graphical.target.wants/"
 	ln -sf ../nabu-sensors-suspend.service "$etc/systemd/system/suspend.target.wants/"
 	ln -sf ../nabu-sensors-resume.service "$etc/systemd/system/suspend.target.wants/"
@@ -568,22 +581,39 @@ overlay_nabu_userspace() {
 	install -m0644 "$m/nabu-accelerometer/config/90-nabu-ssc-accelerometer.rules" "$etc/udev/rules.d/"
 	install -m0644 "$m/nabu-platform/config/99-nabu-serial-wakeup.rules" "$etc/udev/rules.d/"
 
-	# --- USB serial debug console (kernel built-in gadget) ----------------
-	# The ttyGS0 login getty is gone: ttyGS0 is only created once a USB host
-	# enumerates the gadget, so enabling serial-getty@ttyGS0.service made
-	# systemd wait for dev-ttyGS0.device for the full 90 s device timeout on
-	# every boot without a host cable.  That stalled multi-user.target ->
-	# hexagonrpcd -> the SSC sensor proxy, and the sensor stack came up only
-	# after Mutter had already started and claimed the (not yet ready)
-	# accelerometer.  Drop the getty and the on-demand udev rule; the kernel
-	# printk is still readable with `dmesg` (or by adding console=ttyGS0).
-	# Drop the superseded configfs gadget helper if a reused rootfs has it.
-	rm -f "$etc/systemd/system/nabu-usb-console.service" \
-		"$etc/systemd/system/multi-user.target.wants/nabu-usb-console.service" \
-		"$etc/udev/rules.d/99-nabu-usb-console.rules" \
-		"$etc/udev/rules.d/99-nabu-ttygs0-getty.rules" \
-		"$ROOTFS/usr/local/lib/nabu/nabu-usb-console.sh" \
-		"$etc/systemd/system/getty.target.wants/serial-getty@ttyGS0.service"
+	# --- USB serial debug console (configfs CDC-ACM gadget) ----------------
+	# The production kernel has CONFIG_USB_CONFIGFS_ACM=y, not the legacy
+	# CONFIG_USB_G_SERIAL, so expose the gadget from userspace and put
+	# console=ttyGS0 on the command line (config/debian.cmdline) to get printk
+	# on the host.  The ttyGS0 login getty stays masked: ttyGS0 is only
+	# created once a USB host enumerates the gadget, so an enabled
+	# serial-getty@ttyGS0.service made systemd wait for dev-ttyGS0.device for
+	# the full 90 s timeout on every boot without a host cable, which stalled
+	# multi-user.target -> hexagonrpcd -> the SSC sensor proxy.
+	install -m0755 "$m/nabu-serial/libexec/nabu-usb-console.sh" \
+		"$ROOTFS/usr/local/libexec/nabu-usb-console.sh"
+	install -m0644 "$m/nabu-serial/system/nabu-usb-console.service" \
+		"$etc/systemd/system/nabu-usb-console.service"
+	ln -sf ../nabu-usb-console.service "$etc/systemd/system/multi-user.target.wants/"
+	# serial-debug ships a login getty on ttyGS0 (a host is attached on that
+	# build, so ttyGS0 exists and the getty never stalls boot) so
+	# debian/serial_cmd.py can run commands over the serial link when the
+	# network is down.  Every other product masks it: console=ttyGS0 would
+	# otherwise make systemd start the generator's getty and wait for
+	# dev-ttyGS0.device for the full 90 s timeout without a host cable.
+	case $PRODUCT in
+	serial-debug)
+		install -d -m0755 "$etc/systemd/system/getty.target.wants"
+		ln -sf ../serial-getty@ttyGS0.service \
+			"$etc/systemd/system/getty.target.wants/serial-getty@ttyGS0.service"
+		;;
+	*)
+		ln -sf /dev/null "$etc/systemd/system/serial-getty@ttyGS0.service"
+		rm -f "$etc/systemd/system/getty.target.wants/serial-getty@ttyGS0.service"
+		;;
+	esac
+	# Drop leftovers from the superseded legacy-g_serial setup.
+	rm -f "$ROOTFS/usr/local/lib/nabu/nabu-usb-console.sh"
 	rmdir "$ROOTFS/usr/local/lib/nabu" 2>/dev/null || true
 	install -d -m0755 "$ROOTFS/usr/local/share/doc/nabu-debian"
 	install -m0644 "$HERE/config/USB-CONSOLE.md" "$ROOTFS/usr/local/share/doc/nabu-debian/"
@@ -910,9 +940,16 @@ build_uki() {
 	# The template hardcodes root=PARTLABEL=linux; rewrite it so the UKI and
 	# /etc/fstab (NABU_LABEL) always agree on the root partition.
 	local cmdline=$HERE/work/ukify.cmdline
+	# serial-debug keeps the charger modules out of the way (so the USB-C port
+	# enumerates as a device for the nabu-serial gadget) on top of the normal
+	# command line.
+	local cmdline_template=$HERE/config/debian.cmdline
+	case $PRODUCT in
+	serial-debug) cmdline_template=$HERE/config/debian-serial.cmdline ;;
+	esac
 	mkdir -p "$HERE/work"
 	sed "s|root=PARTLABEL=[^ 	]*|root=PARTLABEL=$LABEL|" \
-		"$HERE/config/debian.cmdline" >"$cmdline"
+		"$cmdline_template" >"$cmdline"
 	log "package UKI -> $OUT/nabu-debian.efi (root=PARTLABEL=$LABEL)"
 	mkdir -p "$OUT"
 	"$ukify_py" "$ukify_bin" build \
