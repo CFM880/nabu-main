@@ -1,1 +1,1 @@
-root=PARTLABEL=linux rw fw_devlink=permissive modprobe.blacklist=venus_core module_blacklist=venus_core,ln8000_charger,qcom_iris,qcom_camss,ov13b10,ov8856,cn3927 console=tty0 console=ttyGS0 no_console_suspend pm_debug_messages
+root=PARTLABEL=linux rw fw_devlink=permissive modprobe.blacklist=venus_core module_blacklist=venus_core,ln8000_charger,qcom_camss,ov13b10,ov8856,cn3927 console=tty0 console=ttyGS0 no_console_suspend pm_debug_messages
