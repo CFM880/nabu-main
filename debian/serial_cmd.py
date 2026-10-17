@@ -65,7 +65,16 @@ def expect(fd, pats, timeout):
     return None, buf
 
 def send(fd, s):
-    os.write(fd, s.encode())
+    # The gadget console's buffer can be full (the tty is O_NONBLOCK), so
+    # write in a loop instead of failing with EAGAIN mid-command.
+    data = s.encode()
+    while data:
+        try:
+            data = data[os.write(fd, data):]
+        except BlockingIOError:
+            select.select([], [fd], [], 1.0)
+        except InterruptedError:
+            continue
 
 fd = open_serial(DEV)
 drain(fd, 0.3)
