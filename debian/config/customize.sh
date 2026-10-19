@@ -98,6 +98,11 @@ fi
 # The kernel qcom_pd_mapper carries the SM8150 domain table; the userspace
 # pd-mapper would answer with empty domain lists and break SLPI discovery.
 chroot "$root" systemctl mask pd-mapper.service >/dev/null 2>&1 || true
+# The BT stack keeps the c8c000.serial UART busy, and that UART's system
+# suspend then takes ~127 ms and sometimes never completes, wedging the whole
+# suspend.  The tablet has no usable BT adapter anyway (no hci device), so mask
+# the service.
+chroot "$root" systemctl mask bluetooth.service >/dev/null 2>&1 || true
 
 # --- machine identity -----------------------------------------------------
 if command -v systemd-machine-id-setup >/dev/null 2>&1; then

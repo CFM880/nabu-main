@@ -597,6 +597,13 @@ overlay_nabu_userspace() {
 		"$etc/modules-load.d" "$etc/udev/rules.d" "$etc/alsa/conf.d" \
 		"$ROOTFS/usr/share/libcamera/ipa/simple"
 
+	# Mask bluetooth: with the BT stack running, c8c000.serial's system suspend
+	# takes ~127 ms and sometimes never returns, which wedges suspend.  There is
+	# no usable BT adapter on this tablet (no hci device), so masking costs
+	# nothing.
+	ln -sfn /dev/null "$etc/systemd/system/bluetooth.service"
+	rm -f "$etc/systemd/system/bluetooth.target.wants/bluetooth.service"
+
 	install -m0644 "$m/nabu-iris/system/qcom-iris-autoload.service" "$etc/systemd/system/"
 	if [ "$HAVE_POWER" = 1 ]; then
 		install -m0644 "$m/nabu-power/system/ln8000-autoload.service" "$etc/systemd/system/"
