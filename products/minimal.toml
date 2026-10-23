@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# Minimal product: only the device tree and the display driver.
+#
+# Everything else is left to mainline - the Wi-Fi is ath10k, the storage is
+# ufs, the input is the generic drivers - so that a display or suspend bug can
+# be bisected against our own modules instead of against the whole stack.
+#
+# This product exists purely as a debugging baseline; it is not meant for
+# daily use (no touchscreen, no audio, no camera, no charger).
+#
+# It uses its own release string (6.14.11-nabu-minimal) on purpose: the modules
+# of the two kernels must be able to live in /lib/modules side by side, and
+# vermagic has to keep them apart.  Its UKI is installed under a separate name
+# so the production entry stays selectable in the boot menu.
+#
+# Build it with:
+#   make PRODUCT=minimal
+#   PRODUCT=minimal make debian-img
+[product]
+name    = "minimal"
+modules = ["nabu-platform", "nabu-display", "nabu-touchscreen", "nabu-iris", "nabu-audio", "nabu-accelerometer", "nabu-power", "nabu-serial"]
+release = "6.14.11-nabu-minimal"
+image   = true
+dtb     = "sm8150-xiaomi-nabu-minimal.dtb"
+cmdline = "config/minimal.cmdline"
+kernel_config = ["config/sm8150.config", "config/nabu-rtc.config", "config/nabu-netconsole.config"]
+sbat    = "config/uki.sbat"
+uki     = "nabu-minimal.efi"
+
+[install]
+esp        = "/dev/disk/by-partlabel/esp"
+esp_mount  = "/boot/efi"
+uki_target = "EFI/debian/nabu-minimal.efi"
+boot_label = "nabu-minimal"
