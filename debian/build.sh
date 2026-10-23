@@ -629,6 +629,13 @@ overlay_nabu_userspace() {
 	ln -sf /usr/lib/systemd/system/hexagonrpcd.service \
 		"$etc/systemd/system/multi-user.target.wants/hexagonrpcd.service"
 
+	# Chrome/mpv need to allocate VA-API surface backings from the system
+	# DMA-heap.  It is root-only by default, so every vaCreateSurfaces falls
+	# back to memfd, which EGL cannot import: Chrome then shows a black video
+	# (or silently drops to software) and mpv logs "dma_heap unavailable".
+	install -m0644 "$m/nabu-iris/config/99-qcom-iris-dmaheap.rules" \
+		"$etc/udev/rules.d/99-qcom-iris-dmaheap.rules"
+
 	install -d -m0755 "$etc/systemd/system/hexagonrpcd.service.d"
 	install -m0644 "$m/nabu-accelerometer/config/nabu-slpi-hexagonrpcd.conf" \
 		"$etc/systemd/system/hexagonrpcd.service.d/nabu-slpi.conf"
