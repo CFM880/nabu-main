@@ -44,7 +44,8 @@ RUN set -eux; \
 #   * kernel toolchain (gcc-aarch64-linux-gnu, headers, ukify, kmod, ...); on
 #     amd64 also the arm64 libc/uapi headers, libsystemd and the EFI stub;
 #   * the userspace stack built by the nabu-accelerometer/iris hooks (meson +
-#     protoc, and GLib/QMI/protobuf/GUdev/polkit/libva dev files for the target
+#     protoc, and GLib/QMI/protobuf/GUdev/polkit/libva/libvulkan dev files for
+#     the target
 #     architecture);
 #   * the Debian image build (make debian-img): mmdebstrap, mtools/dosfstools/
 #     e2fsprogs for the esp/linux images, fakeroot, ...
@@ -118,7 +119,8 @@ RUN set -eux; \
 			libgudev-1.0-dev:arm64 \
 			libpolkit-gobject-1-dev:arm64 \
 			libva-dev:arm64 \
-			libdrm-dev:arm64; \
+			libdrm-dev:arm64 \
+			libvulkan-dev:arm64; \
 	else \
 		apt-get install -y --no-install-recommends \
 			systemd-boot-efi \
@@ -128,7 +130,8 @@ RUN set -eux; \
 			libgudev-1.0-dev \
 			libpolkit-gobject-1-dev \
 			libva-dev \
-			libdrm-dev; \
+			libdrm-dev \
+			libvulkan-dev; \
 	fi; \
 	rm -rf /var/lib/apt/lists/*
 
