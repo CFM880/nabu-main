@@ -1,19 +1,19 @@
 # SPDX-License-Identifier: GPL-2.0-only
 # Serial-debug product: the production stack plus the USB CDC-ACM console
-# (nabu-serial), with the chargers kept out of the way from the command line.
+# (nabu-serial), without the charging stack.
 #
 # The USB-C port must enumerate as a device for the nabu-serial gadget to
-# expose the kernel console, but the charger/Type-C drivers otherwise keep it in
-# host/charging role.  Rather than drop nabu-power (which would also change the
-# kernel configuration and break the rootfs modules), blacklist the charger
-# modules on the command line (config/serial-debug.cmdline).
+# expose the kernel console, but the charger/Type-C drivers keep it in
+# host/charging role and grab the HS PHY's D+/D- for APSD/QC detection.  This
+# product therefore drops nabu-power (PM8150B SMB5 + LN8000) instead of only
+# blacklisting the modules.
 #
 # Build it with:
 #   make PRODUCT=serial-debug
 #   PRODUCT=serial-debug make debian-img
 [product]
 name    = "serial-debug"
-modules = ["nabu-platform", "nabu-display", "nabu-touchscreen", "nabu-iris", "nabu-camera", "nabu-audio", "nabu-accelerometer", "nabu-power", "nabu-serial"]
+modules = ["nabu-platform", "nabu-display", "nabu-touchscreen", "nabu-iris", "nabu-camera", "nabu-audio", "nabu-accelerometer", "nabu-serial"]
 release = "6.14.11-nabu-full"
 image   = true
 dtb     = "sm8150-xiaomi-nabu-serial-debug.dtb"

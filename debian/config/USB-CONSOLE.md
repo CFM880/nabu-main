@@ -27,11 +27,12 @@ comes up is still visible.
   ```sh
   sudo systemctl start serial-getty@ttyGS0.service
   ```
-- The USB-C port is forced to **device role** on this debug build
-  (`&usb_1_dwc3 { dr_mode = "peripheral"; }` in `nabu-platform`), because the
-  mainline `pm8150b` TCPM and the downstream `qcom_pmi8998_charger` both drive
-  the PM8150B Type-C power-role register and otherwise leave the port as host.
-  The port therefore cannot act as an OTG host while this is set.
+- The `serial-debug` product drops `nabu-power` (PM8150B SMB5 + LN8000), so
+  the downstream charger drivers cannot keep the Type-C port in host role or
+  grab the HS PHY's D+/D- for APSD/QC detection.  With the charging stack out
+  of the way the mainline `pm8150b` TCPM puts the port in device role when a
+  host is attached.  The port cannot charge or act as an OTG host on this
+  build.
 
 ## On the host PC
 
