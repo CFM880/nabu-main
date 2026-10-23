@@ -618,7 +618,7 @@ overlay_nabu_userspace() {
 	# the profile points at it, hence all three pieces.
 	install -d -m0755 "$etc/dconf/profile" "$etc/dconf/db/local.d"
 	install -m0644 "$m/nabu-accelerometer/config/dconf-profile-user" "$etc/dconf/profile/user"
-	install -m0644 "$m/nabu-accelerometer/config/00-nabu-ambient" "$etc/dconf/db/local.d/00-nabu-ambient"
+	install -m0644 "$m/nabu-accelerometer/config/00-nabu-desktop" "$etc/dconf/db/local.d/00-nabu-desktop"
 	if [ -x "$ROOTFS/usr/bin/dconf" ]; then
 		chroot "$ROOTFS" dconf update ||
 			log "warning: dconf update failed; ambient default not compiled"
