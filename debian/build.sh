@@ -612,6 +612,23 @@ overlay_nabu_userspace() {
 	install -m0644 "$m/nabu-accelerometer/config/nabu-sensors-suspend.service" "$etc/systemd/system/"
 	install -m0644 "$m/nabu-accelerometer/config/nabu-sensors-resume.service" "$etc/systemd/system/"
 
+	# GNOME automatic brightness: a per-user "gsettings set" does not survive a
+	# fresh install, so ship it as a system dconf default.  dconf only reads
+	# /etc/dconf/db/local after "dconf update" has compiled local.d, and only if
+	# the profile points at it, hence all three pieces.
+	install -d -m0755 "$etc/dconf/profile" "$etc/dconf/db/local.d"
+	install -m0644 "$m/nabu-accelerometer/config/dconf-profile-user" "$etc/dconf/profile/user"
+	install -m0644 "$m/nabu-accelerometer/config/00-nabu-ambient" "$etc/dconf/db/local.d/00-nabu-ambient"
+	if [ -x "$ROOTFS/usr/bin/dconf" ]; then
+		chroot "$ROOTFS" dconf update ||
+			log "warning: dconf update failed; ambient default not compiled"
+	fi
+	# hexagonrpcd is a distribution package; enable it explicitly so the SSC
+	# sensors (accelerometer, ambient light) are up on the first boot.
+	install -d -m0755 "$etc/systemd/system/multi-user.target.wants"
+	ln -sf /usr/lib/systemd/system/hexagonrpcd.service \
+		"$etc/systemd/system/multi-user.target.wants/hexagonrpcd.service"
+
 	install -d -m0755 "$etc/systemd/system/hexagonrpcd.service.d"
 	install -m0644 "$m/nabu-accelerometer/config/nabu-slpi-hexagonrpcd.conf" \
 		"$etc/systemd/system/hexagonrpcd.service.d/nabu-slpi.conf"
