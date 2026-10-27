@@ -138,8 +138,10 @@ repodir=/var/lib/nabu-debs
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT INT TERM
 # dpkg-scanpackages needs the real <package>_<version>_<arch>.deb names
+pkgnames=
 for d in $debs; do
 	cp "$d" "$tmp/"
+	pkgnames="$pkgnames $(dpkg-deb -f "$d" Package)"
 done
 ( cd "$tmp" && dpkg-scanpackages . /dev/null 2>/dev/null | gzip -9c > Packages.gz )
 [ -s "$tmp/Packages.gz" ] || die "dpkg-scanpackages produced nothing"
@@ -149,6 +151,11 @@ tar -C "$tmp" -cf - . | $SSH 'mkdir -p /home/cfm880/.nabu-repo && tar -C /home/c
 as_root <<EOS
 set -e
 mkdir -p $repodir
+# Drop the previous build of the same packages; otherwise every deb-install
+# leaves another version behind (28 MB per run) and the index grows stale.
+for p in $pkgnames; do
+	rm -f "$repodir/\${p}_"*.deb
+done
 mv /home/cfm880/.nabu-repo/*.deb $repodir/
 mv /home/cfm880/.nabu-repo/Packages.gz $repodir/
 rm -rf /home/cfm880/.nabu-repo
