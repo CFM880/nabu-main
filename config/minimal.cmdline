@@ -1,1 +1,1 @@
-root=PARTLABEL=linux rw fw_devlink=permissive module_blacklist=venus_core console=ttyGS0 initcall_debug no_console_suspend
+root=PARTLABEL=linux rw fw_devlink=permissive module_blacklist=venus_core console=tty0 initcall_debug no_console_suspend
