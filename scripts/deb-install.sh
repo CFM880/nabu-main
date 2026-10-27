@@ -176,13 +176,31 @@ log "== md5 ok: $uki_md5"
 log "== writing the UKI to $DEST on the ESP"
 as_root <<EOS
 set -e
-img=/tmp/esp-install-\$\$.img
-dd if=$PART of=\$img bs=1M status=none
-mcopy -o -i \$img /home/cfm880/.nabu-uki ::/$DEST
-mdir -i \$img ::/\$(dirname $DEST) | tail -n 2
-dd if=\$img of=$PART bs=1M conv=fsync status=none
-sync
-rm -f \$img /home/cfm880/.nabu-uki
+# On the tablet /boot IS the ESP, so write through the filesystem whenever it
+# is mounted (this also triggers the systemd automount).  The dd/mtools path
+# rewrites the whole partition underneath a live vfat mount: the kernel keeps
+# its own copy of the FAT and the directory entries, and the next sync - the
+# remount-to-read-only that systemd-shutdown does - flushes that stale state
+# over the image.  A reboot then hangs with a black screen and needs a long
+# power press, which is exactly what happened after an install that ran while
+# /boot was automounted.  Only fall back to dd/mtools when /boot is not
+# available (fastboot/TWRP), where nothing has the partition mounted.
+if [ -d /boot/EFI ]; then
+	install -D -m0644 /home/cfm880/.nabu-uki "/boot/$DEST"
+	rm -f /home/cfm880/.nabu-uki
+	sync
+	ls -l "/boot/$DEST"
+	[ "\$(md5sum "/boot/$DEST" | cut -d' ' -f1)" = "$uki_md5" ] ||
+		{ echo "ESP copy does not match the pushed UKI" >&2; exit 1; }
+else
+	img=/tmp/esp-install-\$\$.img
+	dd if=$PART of=\$img bs=1M status=none
+	mcopy -o -i \$img /home/cfm880/.nabu-uki ::/$DEST
+	mdir -i \$img ::/\$(dirname $DEST) | tail -n 2
+	dd if=\$img of=$PART bs=1M conv=fsync status=none
+	sync
+	rm -f \$img /home/cfm880/.nabu-uki
+fi
 echo "== installed $DEST"
 EOS
 
