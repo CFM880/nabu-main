@@ -544,16 +544,32 @@ stage_modules_from_kernel() {
 	fi
 	[ -f "$kernel/Makefile" ] || die "kernel tree not found: $kernel (set NABU_KERNEL_TREE)"
 	[ -d "$MAIN/out" ] || die "missing $MAIN/out; run 'make' in nabu-main first"
-	log "staging /lib/modules/$KERNEL_RELEASE from the current nabu-main build"
-	rm -rf "$WORK/modules-root"
-	install -d -m0755 "$WORK/modules-root"
-	make -C "$kernel" O="$MAIN/out" ARCH="$ARCH" \
-		CROSS_COMPILE="${NABU_CROSS_COMPILE:-aarch64-linux-gnu-}" LOCALVERSION= \
-		-j"${NABU_JOBS:-$(nproc)}" \
-		INSTALL_MOD_PATH="$WORK/modules-root" modules_install
-	MODULES_SRC=$WORK/modules-root/lib/modules/$KERNEL_RELEASE
-	[ -d "$MODULES_SRC" ] || die "modules_install produced no $MODULES_SRC"
-	# drop the build/source links the kernel points back at the build host
+
+	# Take the modules from the same linux-image deb that "make deb-install"
+	# pushes to the tablet, so the image and the device always carry an
+	# identical, dpkg-registered module tree.  deb-kernel also repacks that deb
+	# (no /boot, depmod-only maintainer scripts), which is exactly what a
+	# rootfs with the ESP on /boot needs.
+	local deb=${NABU_KERNEL_DEB:-}
+	if [ -z "$deb" ]; then
+		deb=$(ls -t "$MAIN"/linux-image-*"$KERNEL_RELEASE"*.deb 2>/dev/null |
+			grep -v -- '-dbg' | head -n 1 || true)
+	fi
+	if [ -z "$deb" ]; then
+		log "no kernel deb for $KERNEL_RELEASE yet; building one with make deb-kernel"
+		make -C "$MAIN" deb-kernel || die "make deb-kernel failed"
+		deb=$(ls -t "$MAIN"/linux-image-*"$KERNEL_RELEASE"*.deb 2>/dev/null |
+			grep -v -- '-dbg' | head -n 1 || true)
+	fi
+	[ -n "$deb" ] || die "no linux-image deb for $KERNEL_RELEASE"
+
+	log "staging /lib/modules/$KERNEL_RELEASE from $(basename "$deb")"
+	install -m0644 "$deb" "$ROOTFS/tmp/nabu-kernel.deb"
+	chroot "$ROOTFS" dpkg -i /tmp/nabu-kernel.deb
+	rm -f "$ROOTFS/tmp/nabu-kernel.deb"
+
+	MODULES_SRC=$ROOTFS/lib/modules/$KERNEL_RELEASE
+	[ -d "$MODULES_SRC" ] || die "the kernel deb installed no $MODULES_SRC"
 	rm -f "$MODULES_SRC/build" "$MODULES_SRC/source"
 }
 
