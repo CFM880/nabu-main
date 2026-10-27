@@ -120,7 +120,9 @@ RUN set -eux; \
 			libpolkit-gobject-1-dev:arm64 \
 			libva-dev:arm64 \
 			libdrm-dev:arm64 \
-			libvulkan-dev:arm64; \
+			libvulkan-dev:arm64 \
+			debhelper \
+			libssl-dev; \
 	else \
 		apt-get install -y --no-install-recommends \
 			systemd-boot-efi \
@@ -131,7 +133,9 @@ RUN set -eux; \
 			libpolkit-gobject-1-dev \
 			libva-dev \
 			libdrm-dev \
-			libvulkan-dev; \
+			libvulkan-dev \
+			debhelper \
+			libssl-dev; \
 	fi; \
 	rm -rf /var/lib/apt/lists/*
 
