@@ -9,7 +9,7 @@ NABU_ARCH    ?= $(shell uname -m)
 NABU_IMAGE   ?= nabu-main-builder:$(if $(filter x86_64,$(NABU_ARCH)),amd64,$(if $(filter aarch64,$(NABU_ARCH)),arm64,$(NABU_ARCH)))
 .DEFAULT_GOAL := all
 
-.PHONY: all discover apply compose config build collect package verify install install-modules rollback clean distclean deb-kernel debian-img debian-rootfs debian-uki debian-clean debian-repair-ownership debian-flash-esp deploy deploy-flash
+.PHONY: all discover apply compose config build collect package verify install install-modules rollback clean distclean deb-kernel deb-install debian-img debian-rootfs debian-uki debian-clean debian-repair-ownership debian-flash-esp deploy deploy-flash
 
 # ---------------------------------------------------------------------------
 # Pipeline stages (discover -> ... -> verify) always run inside the build
@@ -148,6 +148,7 @@ debian-flash-esp:
 #     libssl-dev, hence DPKG_FLAGS=-d.
 # Packages land in this directory (deb-pkg writes to $(objtree)/..).
 deb-kernel:
+	rm -f *.deb
 	docker run --rm --privileged --user "$$(id -u):$$(id -g)" \
 		-e KBUILD_BUILD_USER=$${KBUILD_BUILD_USER:-$(shell id -un)} \
 		-e KBUILD_BUILD_HOST=$${KBUILD_BUILD_HOST:-nabu} \
@@ -160,3 +161,13 @@ deb-kernel:
 			-j$(shell nproc) DPKG_FLAGS=-d bindeb-pkg'
 	@ls -lh *.deb | tail -n 5
 
+
+# Install the kernel .debs and the product UKI on a running tablet, then reboot.
+# Needs the tablet reachable over ssh; the sudo password comes from NABU_PW.
+#   make deb-install                     # product from PRODUCT, host 192.168.0.67
+#   make deb-install HOST=192.168.1.5    # other address
+#   make deb-install DEB_INSTALL_ARGS=-n # do not reboot
+HOST ?= 192.168.0.67
+DEB_INSTALL_ARGS ?=
+deb-install: deb-kernel
+	PRODUCT=$(PRODUCT) scripts/deb-install.sh -H $(HOST) $(DEB_INSTALL_ARGS)
