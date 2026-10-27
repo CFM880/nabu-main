@@ -75,6 +75,16 @@ fi
 deb=$(ls -t "$MAIN"/linux-image-*"$PRODUCT"*.deb 2>/dev/null | grep -v -- '-dbg' | head -n 1 || true)
 [ -n "$deb" ] || die "no linux-image deb for $PRODUCT; run 'make deb-kernel' first"
 
+# Everything we push is safe to install here: the image deb was repacked (no
+# /boot, depmod-only scripts) and the headers deb only writes /usr/src.
+# linux-libc-dev is deliberately left out - it would replace the distribution's
+# uapi headers, and the kernel does not need its own copy on the device.
+debs=$deb
+hdr=$(ls -t "$MAIN"/linux-headers-*"$PRODUCT"*.deb 2>/dev/null | head -n 1 || true)
+if [ -n "$hdr" ]; then
+	debs="$debs $hdr"
+fi
+
 # The UKI is named after the kernel release so that the ESP entry and
 # /lib/modules/<release> always refer to the same build:
 #   linux-image-6.14.11-nabu-minimal_<version>_arm64.deb -> 6.14.11-nabu-minimal
@@ -99,20 +109,56 @@ as_root() { { printf '%s\n' "$NABU_PW"; cat; } | $SSH 'sudo -S -p "" bash -s'; }
 
 $SSH true >/dev/null 2>&1 || die "cannot reach $HOST over ssh"
 
-log "== pushing $(basename "$deb") ($(stat -c %s "$deb") bytes)"
-cat "$deb" | $SSH 'cat > /home/cfm880/.nabu-image.deb' || die "push failed"
-local_md5=$(md5sum "$deb" | cut -d' ' -f1)
-remote_md5=$($SSH 'md5sum /home/cfm880/.nabu-image.deb' | cut -d' ' -f1)
-[ "$local_md5" = "$remote_md5" ] || die "md5 mismatch: $local_md5 != $remote_md5"
-log "== md5 ok: $local_md5"
+for d in $debs; do
+	log "== pushing $(basename "$d") ($(stat -c %s "$d") bytes)"
+	cat "$d" | $SSH 'cat > /home/cfm880/.nabu-deb' || die "push failed"
+	local_md5=$(md5sum "$d" | cut -d' ' -f1)
+	remote_md5=$($SSH 'md5sum /home/cfm880/.nabu-deb' | cut -d' ' -f1)
+	[ "$local_md5" = "$remote_md5" ] || die "md5 mismatch: $local_md5 != $remote_md5"
+	log "== md5 ok: $local_md5"
 
-log "== installing /lib/modules/$release with dpkg"
+	# One at a time, re-pushing into the same path.
+	log "== installing $(basename "$d")"
+	as_root <<'EOS'
+set -e
+dpkg -i /home/cfm880/.nabu-deb
+rm -f /home/cfm880/.nabu-deb
+EOS
+done
+
 as_root <<EOS
 set -e
-dpkg -i /home/cfm880/.nabu-image.deb
-rm -f /home/cfm880/.nabu-image.deb
 echo "  modules: \$(find /lib/modules/$release -name '*.ko*' | wc -l)"
 EOS
+
+# Publish the same .debs in a tiny local apt repository, so "apt search" and
+# "apt install" know them by name.  Packages/ is generated here: the tablet has
+# no dpkg-dev, and a compressed index is enough for apt.
+repodir=/var/lib/nabu-debs
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT INT TERM
+# dpkg-scanpackages needs the real <package>_<version>_<arch>.deb names
+for d in $debs; do
+	cp "$d" "$tmp/"
+done
+( cd "$tmp" && dpkg-scanpackages . /dev/null 2>/dev/null | gzip -9c > Packages.gz )
+[ -s "$tmp/Packages.gz" ] || die "dpkg-scanpackages produced nothing"
+
+log "== publishing a local apt repository"
+tar -C "$tmp" -cf - . | $SSH 'mkdir -p /home/cfm880/.nabu-repo && tar -C /home/cfm880/.nabu-repo -xf -'
+as_root <<EOS
+set -e
+mkdir -p $repodir
+mv /home/cfm880/.nabu-repo/*.deb $repodir/
+mv /home/cfm880/.nabu-repo/Packages.gz $repodir/
+rm -rf /home/cfm880/.nabu-repo
+echo "deb [trusted=yes] file:$repodir ./" > /etc/apt/sources.list.d/nabu-local.list
+apt-get update -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/nabu-local.list \
+	-o Dir::Etc::sourceparts=/dev/null -o APT::Get::List-Cleanup=0 >/dev/null 2>&1 || \
+	apt-get update >/dev/null 2>&1 || true
+echo "  repo: $repodir (\$(ls $repodir/*.deb | wc -l) packages)"
+EOS
+rm -rf "$tmp"; trap - EXIT INT TERM
 
 log "== pushing $(basename "$UKI")"
 cat "$UKI" | $SSH 'cat > /home/cfm880/.nabu-uki' || die "push failed"
