@@ -8,9 +8,15 @@
 # kernel itself is booted from a UKI on the ESP - deb-pkg's vmlinuz has no
 # composed product DTB and no command line, so it must not be used for booting.
 #
-# The modules are unpacked with `dpkg --unpack`, not `dpkg -i`: the Debian
-# kernel postinst wants initramfs-tools/update-grub, which this image does not
-# have, and the unpack step already puts every file in place.
+# Only /lib/modules is extracted from the deb, by hand:
+#   * `dpkg -i` runs the Debian kernel postinst, which wants initramfs-tools and
+#     update-grub - this image has neither;
+#   * `dpkg --unpack` fails here anyway, because /boot on this tablet IS the ESP
+#     (vfat, automounted on /boot), and dpkg insists on hard-linking the old
+#     /boot/System.map-<release> out of the way.  vfat has no hard links, so the
+#     unpack aborts with "unable to make backup link ... Operation not permitted".
+# The kernel does not boot from /boot either - it boots from the UKI - so the
+# vmlinuz/System.map/config members are useless here.
 #
 # The ESP cannot be mounted on the tablet (4096-byte logical sectors vs FAT's
 # 512: "can't read superblock"), and mtools refuses the partition directly
@@ -23,7 +29,9 @@
 #   -H host       tablet address            (default 192.168.0.67)
 #   -p product    product name             (default from PRODUCT or production)
 #   -u uki        local UKI                (default artifacts/<product>/<uki>)
-#   -d dest       UKI path inside the ESP   (default EFI/debian/nabu-debian.efi)
+#   -d dest       UKI path inside the ESP   (default EFI/debian/<release>.efi,
+#                                           e.g. EFI/debian/6.14.11-nabu-minimal.efi,
+#                                           so the file name matches the modules)
 #   -P part       ESP partition            (default /dev/disk/by-partlabel/esp)
 #   -n            do not reboot
 #
@@ -36,7 +44,7 @@ MAIN=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 HOST=192.168.0.67
 PRODUCT=${PRODUCT:-production}
 UKI=
-DEST=EFI/debian/nabu-debian.efi
+DEST=
 PART=/dev/disk/by-partlabel/esp
 REBOOT=1
 
@@ -70,6 +78,16 @@ fi
 deb=$(ls -t "$MAIN"/linux-image-*"$PRODUCT"*.deb 2>/dev/null | grep -v -- '-dbg' | head -n 1 || true)
 [ -n "$deb" ] || die "no linux-image deb for $PRODUCT; run 'make deb-kernel' first"
 
+# The UKI is named after the kernel release so that the ESP entry and
+# /lib/modules/<release> always refer to the same build:
+#   linux-image-6.14.11-nabu-minimal_<version>_arm64.deb -> 6.14.11-nabu-minimal
+release=$(basename "$deb" | sed 's/^linux-image-//; s/_.*$//')
+[ -n "$release" ] || die "cannot derive the release from $(basename "$deb")"
+# set -e would abort on the "no" branch of a bare && chain
+if [ -z "$DEST" ]; then
+	DEST=EFI/debian/$release.efi
+fi
+
 if [ -z "${NABU_PW:-}" ]; then
 	if [ -t 0 ]; then
 		printf 'sudo password for %s: ' "$HOST" >&2
@@ -91,12 +109,14 @@ remote_md5=$($SSH 'md5sum /home/cfm880/.nabu-image.deb' | cut -d' ' -f1)
 [ "$local_md5" = "$remote_md5" ] || die "md5 mismatch: $local_md5 != $remote_md5"
 log "== md5 ok: $local_md5"
 
-log "== installing modules (dpkg --unpack)"
-as_root <<'EOS'
+log "== installing /lib/modules/$release"
+as_root <<EOS
 set -e
-dpkg --unpack /home/cfm880/.nabu-image.deb >/dev/null
+dpkg-deb --fsys-tarfile /home/cfm880/.nabu-image.deb |
+	tar -x -C / --wildcards './lib/modules/$release/*'
 rm -f /home/cfm880/.nabu-image.deb
-ls -d /lib/modules/*/ | tail -n 3
+depmod $release
+echo "  modules: \$(find /lib/modules/$release -name '*.ko*' | wc -l)"
 EOS
 
 log "== pushing $(basename "$UKI")"
