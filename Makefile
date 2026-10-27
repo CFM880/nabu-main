@@ -159,6 +159,7 @@ deb-kernel:
 		sh -c 'make -C linux-6.14 O=$(CURDIR)/out ARCH=arm64 \
 			CROSS_COMPILE=aarch64-linux-gnu- LOCALVERSION= \
 			-j$(shell nproc) DPKG_FLAGS=-d bindeb-pkg'
+	@scripts/deb-repack.sh linux-image-*.deb
 	@ls -lh *.deb | tail -n 5
 
 

@@ -8,15 +8,12 @@
 # kernel itself is booted from a UKI on the ESP - deb-pkg's vmlinuz has no
 # composed product DTB and no command line, so it must not be used for booting.
 #
-# Only /lib/modules is extracted from the deb, by hand:
-#   * `dpkg -i` runs the Debian kernel postinst, which wants initramfs-tools and
-#     update-grub - this image has neither;
-#   * `dpkg --unpack` fails here anyway, because /boot on this tablet IS the ESP
-#     (vfat, automounted on /boot), and dpkg insists on hard-linking the old
-#     /boot/System.map-<release> out of the way.  vfat has no hard links, so the
-#     unpack aborts with "unable to make backup link ... Operation not permitted".
-# The kernel does not boot from /boot either - it boots from the UKI - so the
-# vmlinuz/System.map/config members are useless here.
+# "make deb-kernel" already repacked the image deb (scripts/deb-repack.sh):
+# /boot is gone from the payload and the maintainer scripts only run depmod.
+# That matters because /boot on this tablet IS the ESP (vfat, automounted), and
+# the stock Debian scripts both fail there ("unable to make backup link of
+# ./boot/System.map-...: Operation not permitted") and would try to rebuild an
+# initramfs that this system does not use.
 #
 # The ESP cannot be mounted on the tablet (4096-byte logical sectors vs FAT's
 # 512: "can't read superblock"), and mtools refuses the partition directly
@@ -109,13 +106,11 @@ remote_md5=$($SSH 'md5sum /home/cfm880/.nabu-image.deb' | cut -d' ' -f1)
 [ "$local_md5" = "$remote_md5" ] || die "md5 mismatch: $local_md5 != $remote_md5"
 log "== md5 ok: $local_md5"
 
-log "== installing /lib/modules/$release"
+log "== installing /lib/modules/$release with dpkg"
 as_root <<EOS
 set -e
-dpkg-deb --fsys-tarfile /home/cfm880/.nabu-image.deb |
-	tar -x -C / --wildcards './lib/modules/$release/*'
+dpkg -i /home/cfm880/.nabu-image.deb
 rm -f /home/cfm880/.nabu-image.deb
-depmod $release
 echo "  modules: \$(find /lib/modules/$release -name '*.ko*' | wc -l)"
 EOS
 
