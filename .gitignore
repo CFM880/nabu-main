@@ -8,3 +8,8 @@ __pycache__/
 /debian/work/
 /debian/out/
 /debian/packages/*.deb
+
+# Kernel packages built by "make deb-kernel" land in the repo root.
+/*.deb
+/*.changes
+/*.buildinfo

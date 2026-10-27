@@ -564,6 +564,19 @@ stage_modules_from_kernel() {
 	[ -n "$deb" ] || die "no linux-image deb for $KERNEL_RELEASE"
 
 	log "staging /lib/modules/$KERNEL_RELEASE from $(basename "$deb")"
+
+	# A reused rootfs may still carry the duplicate nabu-linux-modules package,
+	# and possibly an older linux-image.  Both own the same files, so purge them
+	# first: dpkg would otherwise refuse to overwrite (or would remove the shared
+	# module tree when purging the duplicate later).  Everything comes back with
+	# the install below.
+	for pkg in nabu-linux-modules "linux-image-$KERNEL_RELEASE"; do
+		if chroot "$ROOTFS" dpkg -s "$pkg" >/dev/null 2>&1; then
+			log "purging stale $pkg from the rootfs"
+			chroot "$ROOTFS" dpkg --purge --force-all "$pkg" >/dev/null || true
+		fi
+	done
+
 	install -m0644 "$deb" "$ROOTFS/tmp/nabu-kernel.deb"
 	chroot "$ROOTFS" dpkg -i /tmp/nabu-kernel.deb
 	rm -f "$ROOTFS/tmp/nabu-kernel.deb"
@@ -590,9 +603,11 @@ install_missing_inputs() {
 		install_one_deb "$FIRMWARE_DEB"
 	fi
 	if [ "$MODULES_FROM_BUILD" = 1 ]; then
+		# stage_modules_from_kernel() installs the repacked linux-image deb,
+		# which already provides /lib/modules/$KERNEL_RELEASE and is registered
+		# in the image's dpkg database.  A separate nabu-linux-modules package
+		# would only duplicate those files, so do not build one.
 		stage_modules_from_kernel
-		build_modules_deb "$WORK/nabu-linux-modules_${MODULES_VERSION}_arm64.deb"
-		install_one_deb "$WORK/nabu-linux-modules_${MODULES_VERSION}_arm64.deb"
 	elif ! pkg_input_present "nabu-linux-modules_*.deb"; then
 		host_copy_modules
 	fi
