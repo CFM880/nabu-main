@@ -7,6 +7,11 @@ NABU    := ./scripts/nabu
 # Same default as docker/run.sh and docker/build-image.sh.
 NABU_ARCH    ?= $(shell uname -m)
 NABU_IMAGE   ?= nabu-main-builder:$(if $(filter x86_64,$(NABU_ARCH)),amd64,$(if $(filter aarch64,$(NABU_ARCH)),arm64,$(NABU_ARCH)))
+
+# Kernel tree comes from repos.lock ([kernel] path), never from a literal here:
+# the same tree is used by scripts/nabu for apply/config/build, and switching
+# the port to another base (6.14 -> 6.18) must not leave this rule behind.
+KERNEL_PATH := $(shell python3 -c 'import tomllib;print(tomllib.load(open("repos.lock","rb"))["kernel"]["path"])' 2>/dev/null)
 .DEFAULT_GOAL := all
 
 .PHONY: all discover apply compose config build collect package verify install install-modules rollback clean distclean deb-kernel deb-install debian-img debian-rootfs debian-uki debian-clean debian-repair-ownership debian-flash-esp deploy deploy-flash
@@ -156,7 +161,7 @@ deb-kernel:
 		-e DEBEMAIL=$${DEBEMAIL:-$(shell id -un)@nabu} \
 		-v "$$(pwd)/..":"$$(pwd)/.." -w "$$(pwd)/.." \
 		$(NABU_IMAGE) \
-		sh -c 'make -C linux-6.14 O=$(CURDIR)/out ARCH=arm64 \
+		sh -c 'make -C $(KERNEL_PATH) O=$(CURDIR)/out ARCH=arm64 \
 			CROSS_COMPILE=aarch64-linux-gnu- LOCALVERSION= \
 			-j$(shell nproc) DPKG_FLAGS=-d bindeb-pkg'
 	@scripts/deb-repack.sh linux-image-*.deb

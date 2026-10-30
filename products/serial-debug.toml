@@ -13,8 +13,8 @@
 #   PRODUCT=serial-debug make debian-img
 [product]
 name    = "serial-debug"
-modules = ["nabu-platform", "nabu-display", "nabu-touchscreen", "nabu-iris", "nabu-camera", "nabu-audio", "nabu-accelerometer", "nabu-serial"]
-release = "6.14.11-nabu-full"
+modules = ["nabu-platform", "nabu-display", "nabu-touchscreen", "nabu-iris", "nabu-audio", "nabu-accelerometer", "nabu-serial"]
+release = "@kv@-nabu-full"
 image   = true
 dtb     = "sm8150-xiaomi-nabu-serial-debug.dtb"
 cmdline = "config/serial-debug.cmdline"

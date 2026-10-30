@@ -10,11 +10,13 @@
 schema = 1
 
 [kernel]
-# Linux base: the upstream b9d5d463 (Linux 6.14.11) tag this port started from.
-# The 60 port commits up to 5181e135 (NABU baseline) are now carried as module
-# overlays, so `apply` resets here and rebuilds everything from the modules.
-path = "linux-6.14"
-base = "b9d5d463c216763cec719c04536ea9e14512cad4"
+# Linux 6.18.y (upstream stable).  v6.18.59, 2026-10-26.
+# The port is carried as module overlays, so `apply` resets the tree here and
+# rebuilds everything from the modules; no kernel commits live in this repo.
+# Previously linux-6.14 @ b9d5d463 (Linux 6.14.11); that tree is still on disk
+# and can be selected again by pointing path/base back at it.
+path = "linux-6.18.y"
+base = "1253a6aa5d104312bf0992afacc15220ae35bdf9"
 
 [modules]
 nabu-platform      = "nabu-platform"

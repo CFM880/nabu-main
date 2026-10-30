@@ -162,12 +162,48 @@ def resolve(modules: dict, selected_names: list) -> list:
     return [m for m in order if m.name in selected]
 
 
+_KV_CACHE: dict = {}
+
+
+def _kernel_version_base() -> str:
+    """Kernel version of the locked base, e.g. "6.14.11" or "6.18.59"."""
+    kernel = kernel_path(load_lock())
+    key = str(kernel)
+    if key not in _KV_CACHE:
+        _KV_CACHE[key] = kernel_release_base(kernel)
+    return _KV_CACHE[key]
+
+
+def _kv_subst(obj, kv: str):
+    if isinstance(obj, str):
+        return obj.replace("@kv@", kv)
+    if isinstance(obj, list):
+        return [_kv_subst(v, kv) for v in obj]
+    if isinstance(obj, dict):
+        return {k: _kv_subst(v, kv) for k, v in obj.items()}
+    return obj
+
+
+def _uses_kv(obj) -> bool:
+    if isinstance(obj, str):
+        return "@kv@" in obj
+    if isinstance(obj, list):
+        return any(_uses_kv(v) for v in obj)
+    if isinstance(obj, dict):
+        return any(_uses_kv(v) for v in obj.values())
+    return False
+
+
 def load_product(name: str) -> dict:
     path = MAIN_DIR / "products" / f"{name}.toml"
     if not path.is_file():
         die(f"unknown product {name!r}: missing {path}")
     with path.open("rb") as fh:
         data = tomllib.load(fh)
+    # "@kv@" expands to the locked kernel version, so a product does not have to
+    # be edited every time the base kernel moves (6.14.11 -> 6.18.59).
+    if _uses_kv(data):
+        data = _kv_subst(data, _kernel_version_base())
     product = data.get("product", {})
     if not product.get("name") or not product.get("modules"):
         die(f"product {name}: missing name/modules")

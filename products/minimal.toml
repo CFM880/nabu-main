@@ -8,7 +8,7 @@
 # This product exists purely as a debugging baseline; it is not meant for
 # daily use (no touchscreen, no audio, no camera, no charger).
 #
-# It uses its own release string (6.14.11-nabu-minimal) on purpose: the modules
+# It uses its own release string (@kv@-nabu-minimal) on purpose: the modules
 # of the two kernels must be able to live in /lib/modules side by side, and
 # vermagic has to keep them apart.  Its UKI is installed under a separate name
 # so the production entry stays selectable in the boot menu.
@@ -19,7 +19,7 @@
 [product]
 name    = "minimal"
 modules = ["nabu-platform", "nabu-display", "nabu-touchscreen", "nabu-iris", "nabu-audio", "nabu-accelerometer", "nabu-power", "nabu-serial"]
-release = "6.14.11-nabu-minimal"
+release = "@kv@-nabu-minimal"
 image   = true
 dtb     = "sm8150-xiaomi-nabu-minimal.dtb"
 cmdline = "config/minimal.cmdline"
