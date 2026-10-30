@@ -175,5 +175,8 @@ deb-kernel:
 #   make deb-install DEB_INSTALL_ARGS=-n # do not reboot
 HOST ?= 192.168.0.67
 DEB_INSTALL_ARGS ?=
+# The kernel debs are named after the product *release* (e.g. 6.18.59-nabu-full
+# for PRODUCT=production), so resolve @kv@ here where the lock is available.
+PRODUCT_RELEASE := $(shell python3 -c 'import tomllib,subprocess; p=tomllib.load(open("products/$(PRODUCT).toml","rb"))["product"]; kv=subprocess.run(["make","-s","-C","../$(KERNEL_PATH)","kernelversion"],capture_output=True,text=True).stdout.strip().splitlines()[-1]; print(p["release"].replace("@kv@",kv))' 2>/dev/null)
 deb-install: deb-kernel
-	PRODUCT=$(PRODUCT) scripts/deb-install.sh -H $(HOST) $(DEB_INSTALL_ARGS)
+	PRODUCT=$(PRODUCT) scripts/deb-install.sh -H $(HOST) -r "$(PRODUCT_RELEASE)" $(DEB_INSTALL_ARGS)

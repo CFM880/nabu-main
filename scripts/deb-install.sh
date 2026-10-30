@@ -44,14 +44,16 @@ UKI=
 DEST=
 PART=/dev/disk/by-partlabel/esp
 REBOOT=1
+RELEASE=
 
-while getopts "H:p:u:d:P:n" opt; do
+while getopts "H:p:u:d:P:r:n" opt; do
 	case "$opt" in
 	H) HOST=$OPTARG ;;
 	p) PRODUCT=$OPTARG ;;
 	u) UKI=$OPTARG ;;
 	d) DEST=$OPTARG ;;
 	P) PART=$OPTARG ;;
+	r) RELEASE=$OPTARG ;;
 	n) REBOOT=0 ;;
 	*) sed -n '3,35p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
 	esac
@@ -70,9 +72,16 @@ if [ -z "$UKI" ]; then
 fi
 [ -f "$UKI" ] || die "no such UKI: $UKI"
 
-# newest first: deb-pkg bumps the Debian revision on every run, and older
+# The kernel debs are named after the product's *release* (kernel release +
+# suffix, e.g. 6.18.59-nabu-full for PRODUCT=production), not after the product
+# name, so match on that when the product file provides one.
+release=$RELEASE
+# youngest first: deb-pkg bumps the Debian revision on every run, and older
 # packages are left behind in the directory.
-deb=$(ls -t "$MAIN"/linux-image-*"$PRODUCT"*.deb 2>/dev/null | grep -v -- '-dbg' | head -n 1 || true)
+if [ -n "$release" ]; then
+	deb=$(ls -t "$MAIN"/linux-image-*"$release"*.deb 2>/dev/null | grep -v -- '-dbg' | head -n 1 || true)
+fi
+[ -n "$deb" ] || deb=$(ls -t "$MAIN"/linux-image-*"$PRODUCT"*.deb 2>/dev/null | grep -v -- '-dbg' | head -n 1 || true)
 [ -n "$deb" ] || die "no linux-image deb for $PRODUCT; run 'make deb-kernel' first"
 
 # Everything we push is safe to install here: the image deb was repacked (no
@@ -80,7 +89,11 @@ deb=$(ls -t "$MAIN"/linux-image-*"$PRODUCT"*.deb 2>/dev/null | grep -v -- '-dbg'
 # linux-libc-dev is deliberately left out - it would replace the distribution's
 # uapi headers, and the kernel does not need its own copy on the device.
 debs=$deb
-hdr=$(ls -t "$MAIN"/linux-headers-*"$PRODUCT"*.deb 2>/dev/null | head -n 1 || true)
+hdr=""
+if [ -n "$release" ]; then
+	hdr=$(ls -t "$MAIN"/linux-headers-*"$release"*.deb 2>/dev/null | head -n 1 || true)
+fi
+[ -n "$hdr" ] || hdr=$(ls -t "$MAIN"/linux-headers-*"$PRODUCT"*.deb 2>/dev/null | head -n 1 || true)
 if [ -n "$hdr" ]; then
 	debs="$debs $hdr"
 fi
