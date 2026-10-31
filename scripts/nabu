@@ -526,6 +526,8 @@ def cmd_build(args) -> None:
     run(make_base(kernel) + ["modules"])
     if (kernel / "arch/arm64/boot/dts/qcom" / dts_file).is_file():
         run(make_base(kernel) + [f"qcom/{dtb}"])
+    elif product.get("uki"):
+        die(f"{dts_file} is missing from the kernel tree; run 'make compose' first")
 
     artifact_dir = ARTIFACTS_BASE / product["name"]
     artifact_dir.mkdir(parents=True, exist_ok=True)
