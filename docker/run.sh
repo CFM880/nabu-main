@@ -83,25 +83,26 @@ if ! flock -n 9; then
 	exit 1
 fi
 
-# out/ is shared between host and container builds, but its *host* tools
-# (out/scripts/kconfig/conf, out/tools/objtool, out/usr/gen_init_cpio,
-# out/certs/extract-cert, ...) are compiled for the build host's architecture.
+# out-<kernel-version>/ is shared between host and container builds, but its
+# *host* tools (scripts/kconfig/conf, tools/objtool, usr/gen_init_cpio,
+# certs/extract-cert, ...) are compiled for the build host's architecture.
 # Drop them when they do not match the image we are about to run and let make
 # rebuild them; the arch-neutral .config and the aarch64 target objects stay, so
 # incremental builds survive.  (Not relevant for the Debian image build.)
-out_dir=$nabu_main_dir/out
-probe=$out_dir/scripts/kconfig/conf
-if [ -z "$debian_action" ] && [ -f "$probe" ] && command -v file >/dev/null 2>&1; then
-	case "$arch" in
-	amd64) keep_re='x86-64' ;;
-	arm64) keep_re='aarch64|ARM' ;;
-	esac
-	if ! file -b "$probe" | grep -qE "$keep_re"; then
-		echo "[docker/run.sh] out/ host tools do not match the $arch image" >&2
-		echo "[docker/run.sh] removing out/{scripts,tools,usr,certs} so make rebuilds them" >&2
-		rm -rf -- "$out_dir/scripts" "$out_dir/tools" "$out_dir/usr" "$out_dir/certs"
+for out_dir in "$nabu_main_dir"/out "$nabu_main_dir"/out-*; do
+	probe=$out_dir/scripts/kconfig/conf
+	if [ -z "$debian_action" ] && [ -f "$probe" ] && command -v file >/dev/null 2>&1; then
+		case "$arch" in
+		amd64) keep_re='x86-64' ;;
+		arm64) keep_re='aarch64|ARM' ;;
+		esac
+		if ! file -b "$probe" | grep -qE "$keep_re"; then
+			echo "[docker/run.sh] $(basename "$out_dir") host tools do not match the $arch image" >&2
+			echo "[docker/run.sh] removing $(basename "$out_dir")/{scripts,tools,usr,certs} so make rebuilds them" >&2
+			rm -rf -- "$out_dir/scripts" "$out_dir/tools" "$out_dir/usr" "$out_dir/certs"
+		fi
 	fi
-fi
+done
 
 run_platform=()
 if [ -n "${NABU_PLATFORM:-}" ]; then

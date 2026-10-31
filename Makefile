@@ -12,6 +12,10 @@ NABU_IMAGE   ?= nabu-main-builder:$(if $(filter x86_64,$(NABU_ARCH)),amd64,$(if 
 # the same tree is used by scripts/nabu for apply/config/build, and switching
 # the port to another base (6.14 -> 6.18) must not leave this rule behind.
 KERNEL_PATH := $(shell python3 -c 'import tomllib;print(tomllib.load(open("repos.lock","rb"))["kernel"]["path"])' 2>/dev/null)
+# Build tree: one per kernel version (out-6.14.11, out-6.18.59, ...), resolved by
+# scripts/nabu from repos.lock so switching the base never mixes object files.
+KERNEL_OUT := $(shell $(NABU) outdir 2>/dev/null)
+KERNEL_OUT := $(if $(KERNEL_OUT),$(KERNEL_OUT),$(CURDIR)/out)
 .DEFAULT_GOAL := all
 
 .PHONY: all discover apply compose config build collect package verify install install-modules rollback clean distclean deb-kernel deb-install debian-img debian-rootfs debian-uki debian-clean debian-repair-ownership debian-flash-esp deploy deploy-flash
@@ -66,7 +70,7 @@ rollback:
 	$(NABU) --product $(PRODUCT) rollback
 
 clean:
-	rm -rf out
+	rm -rf out out-*
 
 distclean: clean
 	rm -rf artifacts
@@ -138,7 +142,8 @@ debian-flash-esp:
 	debian/flash-esp.sh $(ESP_ARGS)
 
 # ---------------------------------------------------------------------------
-# Kernel .debs from the tree that is currently in out/: linux-image (kernel +
+# Kernel .debs from the tree that is currently in $(KERNEL_OUT) (out-6.14.11,
+# out-6.18.59, ...; one directory per kernel version): linux-image (kernel +
 # every module), linux-headers (for out-of-tree modules), -dbg and libc-dev.
 #
 # These are for installing modules with dpkg and for building external modules;
@@ -161,7 +166,7 @@ deb-kernel:
 		-e DEBEMAIL=$${DEBEMAIL:-$(shell id -un)@nabu} \
 		-v "$$(pwd)/..":"$$(pwd)/.." -w "$$(pwd)/.." \
 		$(NABU_IMAGE) \
-		sh -c 'make -C $(KERNEL_PATH) O=$(CURDIR)/out ARCH=arm64 \
+		sh -c 'make -C $(KERNEL_PATH) O=$(KERNEL_OUT) ARCH=arm64 \
 			CROSS_COMPILE=aarch64-linux-gnu- LOCALVERSION= \
 			-j$(shell nproc) DPKG_FLAGS=-d bindeb-pkg'
 	@scripts/deb-repack.sh linux-image-*.deb

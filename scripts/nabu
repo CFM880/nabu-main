@@ -21,7 +21,22 @@ from pathlib import Path
 MAIN_DIR = Path(__file__).resolve().parent.parent
 ROOT = MAIN_DIR.parent
 LOCK_PATH = MAIN_DIR / "repos.lock"
-OUT_DIR = MAIN_DIR / "out"
+
+
+def out_dir() -> Path:
+    """Build directory, one per kernel version (out-6.14.11, out-6.18.59, ...).
+
+    Keeping them apart means switching the locked base (or comparing two
+    kernels) never mixes object files, and both trees stay configured.
+    """
+    lock = load_lock()
+    try:
+        kv = kernel_release_base(kernel_path(lock))
+    except Exception:
+        return MAIN_DIR / "out"
+    return MAIN_DIR / f"out-{kv}"
+
+
 ARTIFACTS_BASE = MAIN_DIR / "artifacts"
 
 ARCH = "arm64"
@@ -232,7 +247,7 @@ def reset_kernel(kernel: Path, base: str) -> None:
         log(f"resetting kernel {head[:12]} -> {base[:12]}")
     git(kernel, "reset", "--hard", base)
     # Remove untracked/ignored overlay files but keep existing out dirs.
-    git(kernel, "clean", "-fdx", "-e", "out", "-e", "out-iris1")
+    git(kernel, "clean", "-fdx", "-e", "out-*", "-e", "out-iris1")
 
 
 def overlay_copy(overlay: Path, kernel: Path) -> None:
@@ -363,8 +378,9 @@ def cmd_config(args) -> None:
     product = load_product(args.product)
     order = resolve(modules, product["modules"])
     kernel = kernel_path(lock)
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
-    config = OUT_DIR / ".config"
+    out = out_dir()
+    out.mkdir(parents=True, exist_ok=True)
+    config = out / ".config"
 
     # Build the base configuration from the kernel branch itself (defconfig +
     # sm8150.config), so symbol renames between branches are handled by the
@@ -382,9 +398,9 @@ def cmd_config(args) -> None:
     if missing:
         die("missing kernel config fragments: " + ", ".join(missing))
 
-    run(["make", "-C", kernel, f"O={OUT_DIR}", f"ARCH={ARCH}",
+    run(["make", "-C", kernel, f"O={out}", f"ARCH={ARCH}",
          f"CROSS_COMPILE={CROSS_COMPILE}", "LOCALVERSION=", "defconfig"])
-    run(["scripts/kconfig/merge_config.sh", "-m", "-O", str(OUT_DIR),
+    run(["scripts/kconfig/merge_config.sh", "-m", "-O", str(out),
          str(config), *[str(p) for p in kernel_frag_paths]], cwd=kernel)
 
     text = config.read_text()
@@ -408,13 +424,13 @@ def cmd_config(args) -> None:
     if missing:
         die("missing config fragments: " + ", ".join(missing))
     if fragments:
-        run(["scripts/kconfig/merge_config.sh", "-m", "-O", str(OUT_DIR),
+        run(["scripts/kconfig/merge_config.sh", "-m", "-O", str(out),
              str(config), *fragments], cwd=kernel)
-    run(["make", "-C", kernel, f"O={OUT_DIR}", f"ARCH={ARCH}",
+    run(["make", "-C", kernel, f"O={out}", f"ARCH={ARCH}",
          f"CROSS_COMPILE={CROSS_COMPILE}", "LOCALVERSION=", "olddefconfig"])
-    run(["make", "-C", kernel, f"O={OUT_DIR}", f"ARCH={ARCH}",
+    run(["make", "-C", kernel, f"O={out}", f"ARCH={ARCH}",
          f"CROSS_COMPILE={CROSS_COMPILE}", "LOCALVERSION=", "syncconfig"])
-    actual = run_capture(["make", "-s", "-C", kernel, f"O={OUT_DIR}",
+    actual = run_capture(["make", "-s", "-C", kernel, f"O={out}",
                           f"ARCH={ARCH}", "LOCALVERSION=", "kernelrelease"])
     log(f"configured release: {actual}")
     if actual != release:
@@ -422,7 +438,7 @@ def cmd_config(args) -> None:
 
 
 def make_base(kernel: Path) -> list:
-    return ["make", "-C", kernel, f"O={OUT_DIR}", f"ARCH={ARCH}",
+    return ["make", "-C", kernel, f"O={out_dir()}", f"ARCH={ARCH}",
             f"CROSS_COMPILE={CROSS_COMPILE}", "LOCALVERSION=", f"-j{JOBS}"]
 
 
@@ -430,7 +446,7 @@ def hook_env(module: Module, kernel: Path, artifact_dir: Path) -> dict:
     env = dict(os.environ)
     env.update({
         "NABU_KERNEL_TREE": str(kernel),
-        "NABU_OUT": str(OUT_DIR),
+        "NABU_OUT": str(out_dir()),
         "NABU_RELEASE": os.environ.get("NABU_PRODUCT_RELEASE", ""),
         "NABU_ARCH": ARCH,
         "NABU_CROSS_COMPILE": CROSS_COMPILE,
@@ -448,10 +464,10 @@ def cmd_build(args) -> None:
     order = resolve(modules, product["modules"])
     kernel = kernel_path(lock)
     dts_file, dtb = dts_name(product)
-    actual = run_capture(["make", "-s", "-C", kernel, f"O={OUT_DIR}",
+    actual = run_capture(["make", "-s", "-C", kernel, f"O={out_dir()}",
                           f"ARCH={ARCH}", "LOCALVERSION=", "kernelrelease"])
     if actual != product["release"]:
-        die(f"out/ is configured for {actual!r}, expected {product['release']!r}; run config first")
+        die(f"{out_dir().name} is configured for {actual!r}, expected {product['release']!r}; run config first")
 
     if product.get("image"):
         run(make_base(kernel) + ["Image"])
@@ -475,7 +491,7 @@ def cmd_build(args) -> None:
 
 def artifact_source(mod: Module, spec: str) -> Path:
     if spec.startswith("out:"):
-        return OUT_DIR / spec[4:]
+        return out_dir() / spec[4:]
     if spec.startswith("module:"):
         return mod.path / spec[7:]
     die(f"{mod.name}: artifact spec must start with 'out:' or 'module:': {spec}")
@@ -511,9 +527,9 @@ def cmd_collect(args) -> None:
             shutil.copy2(source, artifact_dir / name)
             log(f"collected {mod.name}:{name}")
     if product.get("image"):
-        shutil.copy2(OUT_DIR / "arch/arm64/boot/Image", artifact_dir / "Image")
+        shutil.copy2(out_dir() / "arch/arm64/boot/Image", artifact_dir / "Image")
     if product.get("dtb") or dts_file:
-        dtb_src = OUT_DIR / "arch/arm64/boot/dts/qcom" / dtb
+        dtb_src = out_dir() / "arch/arm64/boot/dts/qcom" / dtb
         if dtb_src.is_file():
             shutil.copy2(dtb_src, artifact_dir / dtb)
     log(f"artifacts collected in {artifact_dir}")
@@ -732,7 +748,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--product", "-p", default="production")
     sub = parser.add_subparsers(dest="command", required=True)
     for name in ("discover", "apply", "compose", "config", "build",
-                 "collect", "package", "install", "rollback", "verify", "all"):
+                 "collect", "package", "install", "rollback", "verify",
+                 "outdir", "all"):
         cmd = sub.add_parser(name)
         if name in ("apply", "all"):
             cmd.add_argument("--no-reset", action="store_true")
@@ -756,6 +773,11 @@ def main() -> None:
         order = select(modules, product)
         for mod in order:
             print(f"{mod.name}: {mod.description}")
+        return
+    if args.command == "outdir":
+        # Used by the Makefile ("make deb-kernel") so it builds in the same
+        # per-kernel-version directory as the pipeline.
+        print(out_dir())
         return
     if args.command == "all":
         for name in ("apply", "compose", "config", "build", "collect", "package", "verify"):
