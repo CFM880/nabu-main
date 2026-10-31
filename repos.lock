@@ -14,8 +14,8 @@ schema = 1
 # switch <line>` rewrites path/base below from [kernel.lines] and puts every
 # module on that line's branch, so the tree, the modules and the build
 # directory (out-<kernelversion>) always belong to the same kernel.
-path = "linux-6.14"
-base = "b9d5d463c216763cec719c04536ea9e14512cad4"
+path = "linux-6.18.y"
+base = "1253a6aa5d104312bf0992afacc15220ae35bdf9"
 
 # Known kernel lines.  `module_branch` is the branch every module is checked
 # out to for that line; the 6.14 line stays on each module's main branch.
