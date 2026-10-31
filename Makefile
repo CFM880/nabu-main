@@ -18,7 +18,7 @@ KERNEL_OUT := $(shell $(NABU) outdir 2>/dev/null)
 KERNEL_OUT := $(if $(KERNEL_OUT),$(KERNEL_OUT),$(CURDIR)/out)
 .DEFAULT_GOAL := all
 
-.PHONY: all discover apply compose config build collect package verify install install-modules rollback clean distclean deb-kernel deb-install debian-img debian-rootfs debian-uki debian-clean debian-repair-ownership debian-flash-esp deploy deploy-flash
+.PHONY: all discover apply compose config build collect package verify install install-modules rollback switch clean distclean deb-kernel deb-install debian-img debian-rootfs debian-uki debian-clean debian-repair-ownership debian-flash-esp deploy deploy-flash
 
 # ---------------------------------------------------------------------------
 # Pipeline stages (discover -> ... -> verify) always run inside the build
@@ -68,6 +68,11 @@ install-modules:
 
 rollback:
 	$(NABU) --product $(PRODUCT) rollback
+
+# Move the kernel tree, every module and repos.lock onto one kernel line, e.g.
+# "make switch LINE=6.18".  Each line builds in its own out-<version> directory.
+switch:
+	$(NABU) switch $(LINE)
 
 clean:
 	rm -rf out out-*

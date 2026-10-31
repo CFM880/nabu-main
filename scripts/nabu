@@ -275,6 +275,57 @@ def apply_patch(kernel: Path, patch: Path) -> None:
     log(f"applied patch: {patch.relative_to(ROOT)}")
 
 
+def cmd_switch(args) -> None:
+    """Put the kernel tree, every module and repos.lock on one kernel line."""
+    lines = load_lock()["kernel"].get("lines", {})
+    if args.line not in lines:
+        die(f"unknown kernel line {args.line!r}; known: {', '.join(sorted(lines))}")
+    target = lines[args.line]
+    lock = load_lock()
+
+    # Refuse to lose work: a module with local changes would either fail the
+    # checkout halfway or be carried onto the other line by accident.
+    dirty = []
+    for name, rel in lock["modules"].items():
+        path = (ROOT / rel).resolve()
+        if not (path / ".git").exists():
+            continue
+        status = run_capture(["git", "-C", path, "status", "--porcelain"])
+        if status:
+            dirty.append(f"{name}: {len(status.splitlines())} file(s)")
+    if dirty:
+        die("uncommitted changes, commit or stash them first:\n  " + "\n  ".join(dirty))
+
+    branch = target.get("module_branch")
+    for name, rel in lock["modules"].items():
+        path = (ROOT / rel).resolve()
+        if not (path / ".git").exists():
+            continue
+        current = run_capture(["git", "-C", path, "rev-parse", "--abbrev-ref", "HEAD"])
+        if branch and current != branch:
+            log(f"{name}: {current} -> {branch}")
+            git(path, "checkout", branch)
+
+    # Rewrite only the selection under [kernel]; comments and [kernel.lines]
+    # stay untouched.
+    text = LOCK_PATH.read_text()
+    out, section, done = [], None, {"path": False, "base": False}
+    for ln in text.splitlines(keepends=True):
+        stripped = ln.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            section = stripped[1:-1]
+        elif section == "kernel":
+            for key in ("path", "base"):
+                if stripped.startswith(f"{key} =") and not done[key]:
+                    ln = f'{key} = "{target[key]}"\n'
+                    done[key] = True
+        out.append(ln)
+    LOCK_PATH.write_text("".join(out))
+    log(f"kernel line: {args.line} ({target['path']} @ {target['base'][:12]})")
+    log(f"build directory: {out_dir()}")
+    log("run `make config` when the product or the line changes")
+
+
 def patch_variant(kernel: Path, patch: Path):
     """Prefer a kernel-version specific patch (e.g. foo-6.18.patch) if present.
 
@@ -749,13 +800,15 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
     for name in ("discover", "apply", "compose", "config", "build",
                  "collect", "package", "install", "rollback", "verify",
-                 "outdir", "all"):
+                 "outdir", "switch", "all"):
         cmd = sub.add_parser(name)
         if name in ("apply", "all"):
             cmd.add_argument("--no-reset", action="store_true")
         if name == "install":
             cmd.add_argument("--no-uki", action="store_true",
                              help="install modules/userspace but leave the ESP untouched")
+        if name == "switch":
+            cmd.add_argument("line", help="kernel line from repos.lock, e.g. 6.14 or 6.18")
     return parser
 
 
@@ -773,6 +826,9 @@ def main() -> None:
         order = select(modules, product)
         for mod in order:
             print(f"{mod.name}: {mod.description}")
+        return
+    if args.command == "switch":
+        cmd_switch(args)
         return
     if args.command == "outdir":
         # Used by the Makefile ("make deb-kernel") so it builds in the same

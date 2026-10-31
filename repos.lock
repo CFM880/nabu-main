@@ -10,13 +10,25 @@
 schema = 1
 
 [kernel]
-# Linux 6.18.y (upstream stable).  v6.18.59, 2026-10-26.
-# The port is carried as module overlays, so `apply` resets the tree here and
-# rebuilds everything from the modules; no kernel commits live in this repo.
-# Previously linux-6.14 @ b9d5d463 (Linux 6.14.11); that tree is still on disk
-# and can be selected again by pointing path/base back at it.
+# Linux 6.14 (the working line) or 6.18.y (upstream stable).  `scripts/nabu
+# switch <line>` rewrites path/base below from [kernel.lines] and puts every
+# module on that line's branch, so the tree, the modules and the build
+# directory (out-<kernelversion>) always belong to the same kernel.
+path = "linux-6.14"
+base = "b9d5d463c216763cec719c04536ea9e14512cad4"
+
+# Known kernel lines.  `module_branch` is the branch every module is checked
+# out to for that line; the 6.14 line stays on each module's main branch.
+[kernel.lines."6.14"]
+path = "linux-6.14"
+base = "b9d5d463c216763cec719c04536ea9e14512cad4"
+module_branch = "main"
+
+[kernel.lines."6.18"]
 path = "linux-6.18.y"
+# v6.18.59, 2026-10-26.
 base = "1253a6aa5d104312bf0992afacc15220ae35bdf9"
+module_branch = "6.18.y"
 
 [modules]
 nabu-platform      = "nabu-platform"
