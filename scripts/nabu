@@ -261,6 +261,11 @@ def overlay_copy(overlay: Path, kernel: Path) -> None:
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, target)
         os.chmod(target, source.stat().st_mode | 0o200)
+        # copy2 keeps the overlay file's mtime, which is usually older than the
+        # objects in the build directory: make then skips the file and links
+        # stale objects (undefined symbols at modpost after the overlay
+        # changed).  A copy is a change, so give it the current time.
+        os.utime(target, None)
     log(f"installed overlay {overlay.relative_to(ROOT)} -> kernel")
 
 
