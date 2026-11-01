@@ -18,7 +18,7 @@ KERNEL_OUT := $(shell $(NABU) outdir 2>/dev/null)
 KERNEL_OUT := $(if $(KERNEL_OUT),$(KERNEL_OUT),$(CURDIR)/out)
 .DEFAULT_GOAL := all
 
-.PHONY: all discover apply compose config build collect package verify install install-modules rollback switch clean distclean deb-kernel deb-install debian-img debian-rootfs debian-uki debian-clean debian-repair-ownership debian-flash-esp deploy deploy-flash
+.PHONY: all discover apply compose config build collect package verify install install-modules rollback switch clean distclean deb-kernel deb-host-check deb-install debian-img debian-rootfs debian-uki debian-clean debian-repair-ownership debian-flash-esp deploy deploy-flash
 
 # ---------------------------------------------------------------------------
 # Pipeline stages (discover -> ... -> verify) always run inside the build
@@ -188,5 +188,11 @@ DEB_INSTALL_ARGS ?=
 # The kernel debs are named after the product *release* (e.g. 6.18.59-nabu-full
 # for PRODUCT=production), so resolve @kv@ here where the lock is available.
 PRODUCT_RELEASE := $(shell python3 -c 'import tomllib,subprocess; p=tomllib.load(open("products/$(PRODUCT).toml","rb"))["product"]; kv=subprocess.run(["make","-s","-C","../$(KERNEL_PATH)","kernelversion"],capture_output=True,text=True).stdout.strip().splitlines()[-1]; print(p["release"].replace("@kv@",kv))' 2>/dev/null)
-deb-install: deb-kernel
+# Check the link first: building the kernel packages takes minutes and used to
+# fail at the very end with "cannot reach ... over ssh" when the tablet had
+# dropped off WiFi.
+deb-host-check:
+	scripts/deb-install.sh -H $(HOST) -c
+
+deb-install: deb-host-check deb-kernel
 	PRODUCT=$(PRODUCT) scripts/deb-install.sh -H $(HOST) -r "$(PRODUCT_RELEASE)" $(DEB_INSTALL_ARGS)

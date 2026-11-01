@@ -31,6 +31,8 @@
 #                                           so the file name matches the modules)
 #   -P part       ESP partition            (default /dev/disk/by-partlabel/esp)
 #   -n            do not reboot
+#   -c            connectivity check only (used by make deb-install before it
+#                 spends minutes building the kernel packages)
 #
 # The sudo password comes from NABU_PW (prompted for when stdin is a terminal).
 
@@ -45,8 +47,9 @@ DEST=
 PART=/dev/disk/by-partlabel/esp
 REBOOT=1
 RELEASE=
+CHECK=0
 
-while getopts "H:p:u:d:P:r:n" opt; do
+while getopts "H:p:u:d:P:r:cn" opt; do
 	case "$opt" in
 	H) HOST=$OPTARG ;;
 	p) PRODUCT=$OPTARG ;;
@@ -55,12 +58,38 @@ while getopts "H:p:u:d:P:r:n" opt; do
 	P) PART=$OPTARG ;;
 	r) RELEASE=$OPTARG ;;
 	n) REBOOT=0 ;;
+	c) CHECK=1 ;;
 	*) sed -n '3,35p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
 	esac
 done
 
 log() { printf '%s\n' "$*"; }
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
+
+SSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=5 cfm880@$HOST"
+
+# The tablet drops off WiFi when it sleeps, so a single failed connection is
+# almost always transient.  Wait for it instead of failing after the (slow)
+# kernel package build.
+wait_for_host() {
+	attempt=1
+	while [ "$attempt" -le 12 ]; do
+		if $SSH true >/dev/null 2>&1; then
+			[ "$attempt" -gt 1 ] && log "== $HOST reachable again"
+			return 0
+		fi
+		[ "$attempt" -eq 1 ] && log "== waiting for $HOST (Ctrl-C to stop)"
+		sleep 5
+		attempt=$((attempt + 1))
+	done
+	die "cannot reach $HOST over ssh (check the address or that the tablet is awake)"
+}
+
+if [ "$CHECK" -eq 1 ]; then
+	wait_for_host
+	log "== $HOST is reachable"
+	exit 0
+fi
 
 artifacts=$MAIN/artifacts/$PRODUCT
 [ -d "$artifacts" ] || die "no artifacts for product $PRODUCT; run 'make PRODUCT=$PRODUCT' first"
@@ -117,10 +146,9 @@ if [ -z "${NABU_PW:-}" ]; then
 	fi
 fi
 
-SSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=8 cfm880@$HOST"
 as_root() { { printf '%s\n' "$NABU_PW"; cat; } | $SSH 'sudo -S -p "" bash -s'; }
 
-$SSH true >/dev/null 2>&1 || die "cannot reach $HOST over ssh"
+wait_for_host
 
 for d in $debs; do
 	log "== pushing $(basename "$d") ($(stat -c %s "$d") bytes)"
