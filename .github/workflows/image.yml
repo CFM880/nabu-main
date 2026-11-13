@@ -151,6 +151,14 @@ jobs:
         working-directory: ${{ env.WORKSPACE }}/nabu-main
         run: make PRODUCT="$PRODUCT"
 
+      # debian/build.sh embeds the module tree from a linux-image deb and calls
+      # `make deb-kernel` when there is none - but that target starts a
+      # container, and the image build already runs inside one (no docker
+      # there).  Build the deb on the runner first.
+      - name: Package the kernel
+        working-directory: ${{ env.WORKSPACE }}/nabu-main
+        run: make deb-kernel
+
       - name: Build the Debian image
         working-directory: ${{ env.WORKSPACE }}/nabu-main
         run: make PRODUCT="$PRODUCT" debian-img

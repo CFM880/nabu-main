@@ -75,7 +75,9 @@ debian/
 
 - 独立构建机：只需在 nabu-main 里 `make`（会重跑 `config`），产物
   `nabu-main/artifacts/production-7.2/{Image,*.dtb}` 会被 `debian/build.sh`
-  直接使用；模块/固件/用户态用 `packages/*.deb` 作为输入。
+  直接使用；模块/固件/用户态用 `packages/*.deb` 作为输入。**全新 checkout 还要先
+  `make deb-kernel`**：镜像的 `/lib/modules` 取自 `linux-image` deb，缺这个 deb 时
+  `build.sh` 会在容器里再调 `make deb-kernel`——而容器里没有 docker。
   **不需要（也用不上）`make install`**——那是「构建机就是平板」时把模块写进本机
   `/lib/modules`、UKI 写进 ESP 用的。
 - 在平板自身构建时，才需要先 `nabu-main$ make && sudo make install`

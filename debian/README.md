@@ -93,7 +93,11 @@ directory with `NABU_PACKAGES_DIR`.
 
 The kernel `Image` and DTB come from `nabu-main`'s collected artifacts
 (`artifacts/$PRODUCT`, default `production` = `6.14.11-nabu-full`). Run
-`make package` first.
+`make package` first, then `make deb-kernel`: the image takes its `/lib/modules`
+tree from the `linux-image` deb, and on a fresh tree `build.sh` would try to
+build that deb from inside the container, where there is no docker.  (It only
+needs a panic-time rescuer otherwise; `make debian-img` after `make deb-kernel`
+is the documented order.)
 
 ## Environment
 
