@@ -66,20 +66,44 @@ jobs:
         run: |
           set -euo pipefail
           cd "$WORKSPACE"
-          python3 - <<'PY' > /tmp/modules.txt
+          branch=$(python3 - <<'PY'
           import tomllib
 
           lock = tomllib.load(open("nabu-main/repos.lock", "rb"))
-          line = next(v for v in lock["kernel"]["lines"].values()
-                      if v["path"] == lock["kernel"]["path"])
-          for path in lock["modules"].values():
-              print(f"{path} {line['module_branch']}")
+          print(next(v for v in lock["kernel"]["lines"].values()
+                     if v["path"] == lock["kernel"]["path"])["module_branch"])
           PY
-          while read -r repo branch; do
+          )
+          python3 - <<'PY' > /tmp/repos.txt
+          import tomllib
+
+          lock = tomllib.load(open("nabu-main/repos.lock", "rb"))
+          for path in lock["modules"].values():
+              print(path)
+          PY
+          while read -r repo; do
             echo "== $repo ($branch)"
             git clone --depth 1 --branch "$branch" \
               "https://github.com/$GITHUB_REPOSITORY_OWNER/$repo.git" "$repo"
-          done < /tmp/modules.txt
+          done < /tmp/repos.txt
+
+          # A module may build against a sibling repository it does not own
+          # ([module].repos in its manifest); check those out on the same branch.
+          python3 - <<'PY' > /tmp/companions.txt
+          import glob, tomllib
+
+          for manifest in sorted(glob.glob("*/nabu-module.toml")):
+              data = tomllib.load(open(manifest, "rb"))
+              for repo in data.get("module", {}).get("repos", []):
+                  print(repo)
+          PY
+          while read -r repo; do
+            [ -n "$repo" ] || continue
+            [ -d "$repo" ] && continue
+            echo "== $repo ($branch, declared by a module)"
+            git clone --depth 1 --branch "$branch" \
+              "https://github.com/$GITHUB_REPOSITORY_OWNER/$repo.git" "$repo"
+          done < /tmp/companions.txt
 
       - name: Check out the kernel at the pinned base
         run: |

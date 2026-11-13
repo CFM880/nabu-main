@@ -82,6 +82,9 @@ class Module:
     path: Path
     description: str = ""
     requires: list = field(default_factory=list)
+    # sibling repositories the module's build expects next to nabu-main but
+    # which repos.lock does not track as modules (e.g. a userspace driver)
+    repos: list = field(default_factory=list)
     provides: dict = field(default_factory=dict)
     build: dict = field(default_factory=dict)
     hooks: dict = field(default_factory=dict)
@@ -139,6 +142,7 @@ def discover(lock: dict) -> dict:
             path=path,
             description=data["module"].get("description", ""),
             requires=list(data["module"].get("requires", [])),
+            repos=list(data["module"].get("repos", [])),
             provides=data.get("provides", {}),
             build=data.get("build", {}),
             hooks=data.get("hooks", {}),
@@ -149,6 +153,23 @@ def discover(lock: dict) -> dict:
             die(f"module {name}: manifest declares name {mod.name!r}")
         modules[name] = mod
     return modules
+
+
+def tracked_repos(lock: dict) -> list:
+    """(name, path) of every repository that follows the kernel line.
+
+    repos.lock only lists the modules; a module may also need a sibling
+    repository it does not own (declared as [module].repos), which must be
+    switched to the same branch or the other line's build picks it up.
+    """
+    repos = list(lock["modules"].items())
+    seen = {rel for _, rel in repos}
+    for mod in discover(lock).values():
+        for rel in mod.repos:
+            if rel not in seen:
+                seen.add(rel)
+                repos.append((rel, rel))
+    return repos
 
 
 def resolve(modules: dict, selected_names: list) -> list:
@@ -291,7 +312,7 @@ def cmd_switch(args) -> None:
     # Refuse to lose work: a module with local changes would either fail the
     # checkout halfway or be carried onto the other line by accident.
     dirty = []
-    for name, rel in lock["modules"].items():
+    for name, rel in tracked_repos(lock):
         path = (ROOT / rel).resolve()
         if not (path / ".git").exists():
             continue
@@ -302,7 +323,7 @@ def cmd_switch(args) -> None:
         die("uncommitted changes, commit or stash them first:\n  " + "\n  ".join(dirty))
 
     branch = target.get("module_branch")
-    for name, rel in lock["modules"].items():
+    for name, rel in tracked_repos(lock):
         path = (ROOT / rel).resolve()
         if not (path / ".git").exists():
             continue

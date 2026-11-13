@@ -92,6 +92,8 @@ schema = 1
 name        = "nabu-iris"
 description = "..."
 requires    = []                       # dependency modules; determines topological order
+repos       = ["iris-vaapi"]           # sibling repositories the build expects
+                                       # (not modules of their own)
 
 [provides]
 overlay      = "kernel-overlay"        # copied wholesale into the kernel tree

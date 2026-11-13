@@ -88,6 +88,7 @@ schema = 1
 name        = "nabu-iris"
 description = "..."
 requires    = []                       # 依赖模块，决定拓扑序
+repos       = ["iris-vaapi"]           # 构建需要的同级仓库(本身不是模块)
 
 [provides]
 overlay      = "kernel-overlay"        # 整体复制进内核树
