@@ -87,26 +87,30 @@ distclean: clean
 # scripts directly on the host instead.
 DEBIAN_DOCKER ?= 1
 
+# PRODUCT and KERNEL_RELEASE go into the image environment: the image must carry
+# the module tree and DTB of the product being built, and the debian scripts
+# derive their defaults from the environment (they cannot guess "@kv@-nabu-full"
+# from this Makefile otherwise).
 debian-img:
 ifeq ($(DEBIAN_DOCKER),1)
-	./docker/run.sh debian-img
+	PRODUCT=$(PRODUCT) KERNEL_RELEASE=$(PRODUCT_RELEASE) ./docker/run.sh debian-img
 else
-	debian/build.sh
+	PRODUCT=$(PRODUCT) KERNEL_RELEASE=$(PRODUCT_RELEASE) debian/build.sh
 	debian/make-img.sh
 endif
 
 debian-rootfs:
 ifeq ($(DEBIAN_DOCKER),1)
-	./docker/run.sh debian-rootfs
+	PRODUCT=$(PRODUCT) KERNEL_RELEASE=$(PRODUCT_RELEASE) ./docker/run.sh debian-rootfs
 else
-	debian/build.sh --rootfs-only
+	PRODUCT=$(PRODUCT) KERNEL_RELEASE=$(PRODUCT_RELEASE) debian/build.sh --rootfs-only
 endif
 
 debian-uki:
 ifeq ($(DEBIAN_DOCKER),1)
-	./docker/run.sh debian-uki
+	PRODUCT=$(PRODUCT) KERNEL_RELEASE=$(PRODUCT_RELEASE) ./docker/run.sh debian-uki
 else
-	debian/build.sh --uki-only
+	PRODUCT=$(PRODUCT) KERNEL_RELEASE=$(PRODUCT_RELEASE) debian/build.sh --uki-only
 endif
 
 debian-clean:

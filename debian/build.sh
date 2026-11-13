@@ -42,6 +42,11 @@ ROOTFS=$WORK/rootfs
 OUT=$HERE/out
 PACKAGES_DIR=${NABU_PACKAGES_DIR:-$HERE/packages}
 
+# nabu-main keeps one build directory per kernel version (out-6.18.59, ...);
+# ask the same helper the Makefile uses instead of assuming a literal "out".
+KERNEL_OUT=${NABU_KERNEL_OUT:-$(cd "$MAIN" && python3 scripts/nabu outdir 2>/dev/null || true)}
+KERNEL_OUT=${KERNEL_OUT:-$MAIN/out}
+
 SUITE=${SUITE:-trixie}
 MIRROR=${MIRROR:-https://mirrors.ustc.edu.cn/debian}
 ARCH=arm64
@@ -209,8 +214,8 @@ preflight() {
 		done
 		# missing inputs are only a problem when the host cannot provide them
 		if [ "$MODULES_FROM_BUILD" = 1 ]; then
-			[ -d "$MAIN/out" ] ||
-				die "NABU_MODULES_FROM_BUILD=1 but $MAIN/out is missing; run 'make' in nabu-main first"
+			[ -d "$KERNEL_OUT" ] ||
+				die "NABU_MODULES_FROM_BUILD=1 but $KERNEL_OUT is missing; run 'make' in nabu-main first"
 		else
 			pkg_input_present "nabu-linux-modules_*.deb" ||
 				[ -d "/lib/modules/$KERNEL_RELEASE" ] ||
@@ -543,7 +548,7 @@ stage_modules_from_kernel() {
 		kernel=$NABU_ROOT/$rel
 	fi
 	[ -f "$kernel/Makefile" ] || die "kernel tree not found: $kernel (set NABU_KERNEL_TREE)"
-	[ -d "$MAIN/out" ] || die "missing $MAIN/out; run 'make' in nabu-main first"
+	[ -d "$KERNEL_OUT" ] || die "missing $KERNEL_OUT; run 'make' in nabu-main first"
 
 	# Take the modules from the same linux-image deb that "make deb-install"
 	# pushes to the tablet, so the image and the device always carry an
