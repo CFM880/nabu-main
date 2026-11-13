@@ -121,7 +121,8 @@ jobs:
         run: docker run --privileged --rm tonistiigi/binfmt --install arm64
 
       - name: Build the builder image
-        run: "$WORKSPACE/nabu-main/docker/build-image.sh"
+        working-directory: ${{ env.WORKSPACE }}/nabu-main
+        run: ./docker/build-image.sh
 
       - name: Build the kernel, modules and userspace
         working-directory: ${{ env.WORKSPACE }}/nabu-main
@@ -167,9 +168,9 @@ jobs:
         run: |
           set -euo pipefail
           limit=$((1900 * 1024 * 1024))
-          assets="esp.img EFI.zip nabu-debian.efi flash.sh flash-fastboot.sh IMG-SHA256SUMS"
+          assets=(esp.img EFI.zip nabu-debian.efi flash.sh flash-fastboot.sh IMG-SHA256SUMS)
           if [ "$(stat -c %s linux.img.zst)" -le "$limit" ]; then
-            assets="$assets linux.img.zst"
+            assets+=(linux.img.zst)
           else
             rm -f linux.img.zst.part-*
             split -b 1900M -d -a 1 linux.img.zst linux.img.zst.part-
@@ -181,7 +182,7 @@ jobs:
               unzstd linux.img.zst
               sha256sum -c IMG-SHA256SUMS     # linux.img is checked separately
           EOF
-            assets="$assets linux.img.zst.part-* REASSEMBLE.txt"
+            assets+=(linux.img.zst.part-* REASSEMBLE.txt)
           fi
 
           commit=$(git -C "$GITHUB_WORKSPACE/nabu-linux/nabu-main" rev-parse --short HEAD)
@@ -203,4 +204,4 @@ jobs:
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 ||
             gh release create "$TAG" --repo "$GITHUB_REPOSITORY" \
               --title "nabu image $TAG" --notes "$notes"
-          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber $assets
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber "${assets[@]}"
