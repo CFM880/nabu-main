@@ -172,6 +172,31 @@ install   安装完整模块树 + 各模块 install 映射 + UKI，写安装清�
 rollback  按清单逆序恢复文件与模块树，撤销 UKI 启动项
 ```
 
+## 在 CI 里构建镜像
+
+`.github/workflows/image.yml` 在 GitHub runner 上用与本地完全相同的脚本
+（`docker/build-image.sh`、`make`、`make debian-img`）产出可刷写的镜像
+（`linux.img`、`esp.img`、`EFI.zip`）：
+
+- job 先重建 `scripts/nabu` 需要的目录布局（模块仓和内核树与 `nabu-main` 平级），
+  模块按 `repos.lock` 为当前内核线选择的**分支**检出，内核检出到 `[kernel] base`
+  锁定的**确切提交**；
+- arm64 rootfs 在 runner 上通过 qemu-binfmt 构建，镜像构建同样跑在特权构建容器里，
+  与本地 `make debian-img` 一致；
+- 唯一无法在构建机上生成的输入是**私有固件包**，从 `image-inputs` release 下载。
+
+触发方式：*Actions → image → Run workflow*（可选产品、可选 release tag），或推送
+`image-*` 标签。结果总会作为 workflow artifact 上传；带标签时还会发布成 release，
+若压缩后的 root 镜像超过 GitHub 单文件 2 GiB 限制则自动分卷。
+
+更新输入包：在平板上重新打固件包（`sudo ./debian/build.sh --firmware-deb-only`）
+后上传：
+
+```sh
+gh release upload image-inputs debian/packages/xiaomi-nabu-firmware_*_arm64.deb \
+	-R CFM880/nabu-main --clobber
+```
+
 ## 安装与回滚
 
 - `install` 需要 root；它会先执行 `modules_install` 安装**完整** `/lib/modules/<release>`，

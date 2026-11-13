@@ -1,0 +1,206 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# Build the flashable Debian image (linux.img / esp.img / EFI.zip) with the same
+# scripts a developer runs locally, inside the project's builder container.
+#
+# scripts/nabu expects the module repositories and the kernel tree *next to*
+# nabu-main, so the job recreates that layout under $GITHUB_WORKSPACE/nabu-linux
+# before calling `make`.  The kernel is cloned at the commit pinned in
+# repos.lock; the modules come from their 6.18.y branches.
+#
+# The only input that cannot be produced here is the proprietary firmware
+# package, which is extracted from the tablet.  It is published as a release
+# asset (tag "image-inputs") and downloaded into debian/packages.
+
+name: image
+
+on:
+  workflow_dispatch:
+    inputs:
+      product:
+        description: Product to build (products/<name>.toml)
+        type: choice
+        options: [production, audio-only, serial-debug, minimal]
+        default: production
+      release_tag:
+        description: Publish the result as a release with this tag (empty = workflow artifact only)
+        type: string
+        default: ""
+  push:
+    tags: ["image-*"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: image-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  WORKSPACE: ${{ github.workspace }}/nabu-linux
+  PRODUCT: ${{ inputs.product || 'production' }}
+  # Writer side of the builder image and of mmdebstrap; override in the repo
+  # variables when a closer mirror is faster.
+  NABU_DEBIAN_MIRROR_HOST: ${{ vars.NABU_DEBIAN_MIRROR_HOST || 'deb.debian.org' }}
+  MIRROR: ${{ vars.NABU_DEBIAN_MIRROR || 'https://deb.debian.org/debian' }}
+
+jobs:
+  image:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      # The GNOME rootfs work directory, the images and the builder image need
+      # well over the ~14 GB a stock runner has free.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /opt/hostedtoolcache/CodeQL /usr/local/share/boost /usr/share/swift
+          df -h /
+
+      - name: Check out nabu-main
+        uses: actions/checkout@v4
+        with:
+          path: nabu-linux/nabu-main
+
+      - name: Check out the module repositories
+        run: |
+          set -euo pipefail
+          cd "$WORKSPACE"
+          python3 - <<'PY' > /tmp/modules.txt
+          import tomllib
+
+          lock = tomllib.load(open("nabu-main/repos.lock", "rb"))
+          line = next(v for v in lock["kernel"]["lines"].values()
+                      if v["path"] == lock["kernel"]["path"])
+          for path in lock["modules"].values():
+              print(f"{path} {line['module_branch']}")
+          PY
+          while read -r repo branch; do
+            echo "== $repo ($branch)"
+            git clone --depth 1 --branch "$branch" \
+              "https://github.com/$GITHUB_REPOSITORY_OWNER/$repo.git" "$repo"
+          done < /tmp/modules.txt
+
+      - name: Check out the kernel at the pinned base
+        run: |
+          set -euo pipefail
+          cd "$WORKSPACE"
+          read -r path base < <(python3 - <<'PY'
+          import tomllib
+
+          lock = tomllib.load(open("nabu-main/repos.lock", "rb"))
+          print(lock["kernel"]["path"], lock["kernel"]["base"])
+          PY
+          )
+          remote=https://github.com/gregkh/linux.git
+          tag=$(git ls-remote --tags "$remote" |
+            awk -v base="$base" '$1 == base {
+              sub("refs/tags/", "", $2); sub(/\^\{\}$/, "", $2); print $2
+            }' | head -n 1)
+          if [ -z "$tag" ]; then
+            echo "no tag points at the locked kernel base $base" >&2
+            exit 1
+          fi
+          echo "kernel $path: $base is $tag"
+          git clone --depth 1 --branch "$tag" "$remote" "$path"
+          test "$(git -C "$path" rev-parse HEAD)" = "$base"
+
+      - name: Download the image inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download image-inputs \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern '*_arm64.deb' \
+            --dir "$WORKSPACE/nabu-main/debian/packages" \
+            --clobber
+
+      # mmdebstrap builds an arm64 rootfs; on an amd64 runner it runs dpkg and
+      # package maintainer scripts through qemu-binfmt on the host.
+      - name: Register the arm64 binfmt handler
+        run: docker run --privileged --rm tonistiigi/binfmt --install arm64
+
+      - name: Build the builder image
+        run: "$WORKSPACE/nabu-main/docker/build-image.sh"
+
+      - name: Build the kernel, modules and userspace
+        working-directory: ${{ env.WORKSPACE }}/nabu-main
+        run: make PRODUCT="$PRODUCT"
+
+      - name: Build the Debian image
+        working-directory: ${{ env.WORKSPACE }}/nabu-main
+        run: make PRODUCT="$PRODUCT" debian-img
+
+      # linux.img is a compact ext4 image of the whole rootfs (~5.5 GB) and the
+      # upload paths are slow enough that shipping it compressed matters.
+      - name: Compress the root image and refresh the checksums
+        working-directory: ${{ env.WORKSPACE }}/nabu-main/debian/out
+        run: |
+          set -euo pipefail
+          zstd -T0 -3 -f --rm linux.img -o linux.img.zst
+          sha256sum linux.img.zst esp.img EFI.zip nabu-debian.efi > IMG-SHA256SUMS
+          ls -lh
+
+      - name: Upload the image
+        uses: actions/upload-artifact@v4
+        with:
+          name: nabu-${{ env.PRODUCT }}-image
+          path: |
+            nabu-linux/nabu-main/debian/out/linux.img.zst
+            nabu-linux/nabu-main/debian/out/esp.img
+            nabu-linux/nabu-main/debian/out/EFI.zip
+            nabu-linux/nabu-main/debian/out/nabu-debian.efi
+            nabu-linux/nabu-main/debian/out/flash.sh
+            nabu-linux/nabu-main/debian/out/flash-fastboot.sh
+            nabu-linux/nabu-main/debian/out/IMG-SHA256SUMS
+          compression-level: 0
+          retention-days: 14
+
+      # Release assets are capped at 2 GiB, so a compressed root image that
+      # large is split and shipped with a one-liner that puts it back together.
+      - name: Publish the release
+        if: startsWith(github.ref, 'refs/tags/') || inputs.release_tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.release_tag || github.ref_name }}
+        working-directory: ${{ env.WORKSPACE }}/nabu-main/debian/out
+        run: |
+          set -euo pipefail
+          limit=$((1900 * 1024 * 1024))
+          assets="esp.img EFI.zip nabu-debian.efi flash.sh flash-fastboot.sh IMG-SHA256SUMS"
+          if [ "$(stat -c %s linux.img.zst)" -le "$limit" ]; then
+            assets="$assets linux.img.zst"
+          else
+            rm -f linux.img.zst.part-*
+            split -b 1900M -d -a 1 linux.img.zst linux.img.zst.part-
+            cat > REASSEMBLE.txt <<'EOF'
+          The root image is larger than GitHub's 2 GiB asset limit, so it is
+          split into linux.img.zst.part-* files.  Put it back together with:
+
+              cat linux.img.zst.part-* > linux.img.zst
+              unzstd linux.img.zst
+              sha256sum -c IMG-SHA256SUMS     # linux.img is checked separately
+          EOF
+            assets="$assets linux.img.zst.part-* REASSEMBLE.txt"
+          fi
+
+          commit=$(git -C "$GITHUB_WORKSPACE/nabu-linux/nabu-main" rev-parse --short HEAD)
+          cat > RELEASE-NOTES.txt <<EOF
+          Debian image for the Xiaomi Pad 5 (nabu), product \`$PRODUCT\`, built from
+          nabu-main \`$commit\` by .github/workflows/image.yml.
+
+          - \`linux.img.zst\`: the root filesystem, grows to its partition on first boot
+          - \`esp.img\`: the ESP as a disk image (\`EFI.zip\` is the same tree as a zip)
+          - \`nabu-debian.efi\`: the UKI on its own
+          - \`flash.sh\` / \`flash-fastboot.sh\`: the helpers from \`debian/out\`
+          - checksums in \`IMG-SHA256SUMS\`
+
+          Write them with the helpers (\`sudo ./flash.sh /dev/sdX\`) or copy
+          \`linux.img\` and \`esp.img\` to their partitions by hand.
+          EOF
+          notes=$(cat RELEASE-NOTES.txt)
+
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 ||
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" \
+              --title "nabu image $TAG" --notes "$notes"
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber $assets

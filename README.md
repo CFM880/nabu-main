@@ -192,6 +192,35 @@ install   install the full module tree + each module's install mappings + UKI, w
 rollback  restore files and the module tree in reverse order per the manifest, remove the UKI boot entry
 ```
 
+## Building the image in CI
+
+`.github/workflows/image.yml` produces the flashable image (`linux.img`,
+`esp.img`, `EFI.zip`) on a GitHub runner with the same scripts a local build
+uses - `docker/build-image.sh`, `make`, `make debian-img`:
+
+- the job recreates the workspace layout `scripts/nabu` expects (module
+  repositories and the kernel tree next to `nabu-main`), checking out every
+  module at the branch `repos.lock` selects for the kernel line and the kernel
+  at the exact commit pinned in `[kernel] base`;
+- the arm64 rootfs is built through qemu-binfmt on the runner, and the image
+  build runs in the privileged builder container exactly like `make debian-img`
+  does locally;
+- the one input that cannot be produced on a build server - the proprietary
+  firmware package - is downloaded from the `image-inputs` release.
+
+Trigger it from *Actions → image → Run workflow* (choose a product, optionally
+a release tag) or push a tag matching `image-*`.  The result is always attached
+as a workflow artifact; with a tag it is also published as a release, splitting
+the compressed root image if it exceeds GitHub's 2 GiB per-asset limit.
+
+To refresh the inputs, rebuild the firmware package on the tablet
+(`sudo ./debian/build.sh --firmware-deb-only`) and upload it:
+
+```sh
+gh release upload image-inputs debian/packages/xiaomi-nabu-firmware_*_arm64.deb \
+	-R CFM880/nabu-main --clobber
+```
+
 ## Install and rollback
 
 - `install` requires root; it first runs `modules_install` to install the **complete**
