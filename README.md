@@ -204,9 +204,9 @@ uses - `docker/build-image.sh`, `make`, `make debian-img`:
   repositories and the kernel tree next to `nabu-main`), checking out every
   module at the branch `repos.lock` selects for the kernel line and the kernel
   at the exact commit pinned in `[kernel] base`;
-- the arm64 rootfs is built through qemu-binfmt on the runner, and the image
-  build runs in the privileged builder container exactly like `make debian-img`
-  does locally;
+- the job runs on an `ubuntu-24.04-arm` runner, so the kernel, the userspace
+  hooks and the mmdebstrap rootfs build natively (no cross toolchain, no qemu)
+  in the privileged builder container, exactly like `make debian-img` locally;
 - the one input that cannot be produced on a build server - the proprietary
   firmware package - is downloaded from the `image-inputs` release.
 

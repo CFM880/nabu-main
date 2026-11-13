@@ -3,6 +3,10 @@
 # Build the flashable Debian image (linux.img / esp.img / EFI.zip) with the same
 # scripts a developer runs locally, inside the project's builder container.
 #
+# Everything here targets aarch64, so the job runs on an arm64 runner: the
+# kernel, the userspace hooks and the mmdebstrap rootfs are then built natively
+# instead of cross-compiled (and without qemu emulating dpkg).
+#
 # scripts/nabu expects the module repositories and the kernel tree *next to*
 # nabu-main, so the job recreates that layout under $GITHUB_WORKSPACE/nabu-linux
 # before calling `make`.  The kernel is cloned at the commit pinned in
@@ -46,7 +50,7 @@ env:
 
 jobs:
   image:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 360
     steps:
       # The GNOME rootfs work directory, the images and the builder image need
@@ -138,11 +142,6 @@ jobs:
             --pattern '*_arm64.deb' \
             --dir "$WORKSPACE/nabu-main/debian/packages" \
             --clobber
-
-      # mmdebstrap builds an arm64 rootfs; on an amd64 runner it runs dpkg and
-      # package maintainer scripts through qemu-binfmt on the host.
-      - name: Register the arm64 binfmt handler
-        run: docker run --privileged --rm tonistiigi/binfmt --install arm64
 
       - name: Build the builder image
         working-directory: ${{ env.WORKSPACE }}/nabu-main

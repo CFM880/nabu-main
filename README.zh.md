@@ -182,7 +182,8 @@ rollback  按清单逆序恢复文件与模块树，撤销 UKI 启动项
 - job 先重建 `scripts/nabu` 需要的目录布局（模块仓和内核树与 `nabu-main` 平级），
   模块按 `repos.lock` 为当前内核线选择的**分支**检出，内核检出到 `[kernel] base`
   锁定的**确切提交**；
-- arm64 rootfs 在 runner 上通过 qemu-binfmt 构建，镜像构建同样跑在特权构建容器里，
+- job 跑在 `ubuntu-24.04-arm` runner 上，内核、用户态钩子和 mmdebstrap rootfs
+  全部原生构建（不走交叉工具链、不用 qemu），镜像构建同样在特权构建容器里，
   与本地 `make debian-img` 一致；
 - 唯一无法在构建机上生成的输入是**私有固件包**，从 `image-inputs` release 下载。
 
