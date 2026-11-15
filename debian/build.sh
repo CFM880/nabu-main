@@ -658,6 +658,10 @@ overlay_nabu_userspace() {
 		"$ROOTFS/etc/systemd/user/nabu-autobrightness.service"
 	ln -sf /etc/systemd/user/nabu-autobrightness.service \
 		"$ROOTFS/etc/systemd/user/graphical-session.target.wants/nabu-autobrightness.service"
+	# polkit: the daemon runs as the session user and has to claim the sensor.
+	install -d -m0755 "$ROOTFS/etc/polkit-1/rules.d"
+	install -m0644 "$m/nabu-accelerometer/config/50-nabu-autobrightness.rules" \
+		"$ROOTFS/etc/polkit-1/rules.d/50-nabu-autobrightness.rules"
 	# Power the SLPI/CDSP/ADSP down while the AP sleeps (see the script).
 	install -m0755 "$m/nabu-platform/system/nabu-dsp-sleep" "$ROOTFS/usr/local/libexec/"
 	install -m0644 "$m/nabu-platform/system/nabu-dsp-suspend.service" "$etc/systemd/system/"
