@@ -633,12 +633,14 @@ overlay_nabu_userspace() {
 		"$etc/modules-load.d" "$etc/udev/rules.d" "$etc/alsa/conf.d" \
 		"$ROOTFS/usr/share/libcamera/ipa/simple"
 
-	# Mask bluetooth: with the BT stack running, c8c000.serial's system suspend
-	# takes ~127 ms and sometimes never returns, which wedges suspend.  There is
-	# no usable BT adapter on this tablet (no hci device), so masking costs
-	# nothing.
-	ln -sfn /dev/null "$etc/systemd/system/bluetooth.service"
-	rm -f "$etc/systemd/system/bluetooth.target.wants/bluetooth.service"
+	# Bluetooth: hci_qca brings the WCN3990 up as hci0 on c8c000.serial
+	# ("QCA setup on UART is completed"), so BlueZ is enabled and usable.  It
+	# used to be masked because there seemed to be no adapter and the stack was
+	# suspected of wedging suspend; with the service running and the controller
+	# powered, five suspend cycles all came back cleanly.
+	install -d -m0755 "$etc/systemd/system/bluetooth.target.wants"
+	ln -sf /usr/lib/systemd/system/bluetooth.service \
+		"$etc/systemd/system/bluetooth.target.wants/bluetooth.service"
 
 	install -m0644 "$m/nabu-iris/system/qcom-iris-autoload.service" "$etc/systemd/system/"
 	if [ "$HAVE_POWER" = 1 ]; then
