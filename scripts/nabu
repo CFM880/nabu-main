@@ -666,12 +666,20 @@ def cmd_package(args) -> None:
     for needed in (artifact_dir / "Image", artifact_dir / dtb):
         if not needed.is_file():
             die(f"missing collected artifact {needed}; run 'make collect' first")
+    # rEFInd titles a UKI with the os-release embedded in it, so stamp the
+    # release: a rollback kernel kept on the same ESP must be recognisable.
+    os_release = artifact_dir / "uki.os-release"
+    text = Path("/etc/os-release").read_text()
+    for key in ("PRETTY_NAME", "VERSION"):
+        text = re.sub(rf'^{key}="(.*)"$', rf'{key}="\1 — {product["release"]}"',
+                      text, flags=re.M)
+    os_release.write_text(text)
     cmd = [
         "python3", "/usr/bin/ukify", "build",
         "--linux", str(artifact_dir / "Image"),
         "--devicetree", str(artifact_dir / dtb),
         "--cmdline", "@" + str(MAIN_DIR / product["cmdline"]),
-        "--os-release", "@/etc/os-release",
+        "--os-release", "@" + str(os_release),
         "--uname", product["release"],
         "--sbat", "@" + str(MAIN_DIR / product.get("sbat", "config/uki.sbat")),
         "--efi-arch", "aa64",
