@@ -9,6 +9,7 @@ a module name in its logic.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 import re
 import shutil
@@ -230,6 +231,42 @@ def _uses_kv(obj) -> bool:
     return False
 
 
+def _release_content_id(product: dict, modules: dict) -> str:
+    """Short hash of everything that shapes the kernel and its modules.
+
+    Two builds with identical inputs share /lib/modules/<release> and can be
+    booted interchangeably; any change to an overlay, a kernel fragment or a
+    module manifest gets its own release - and therefore its own module tree -
+    which is what lets a rollback kernel keep its modules next to the current
+    one.
+    """
+    digest = hashlib.sha1()
+
+    def feed(label: str, path: Path) -> None:
+        if not path.is_file():
+            return
+        digest.update(label.encode())
+        digest.update(path.read_bytes())
+
+    for name in product["modules"]:
+        mod = modules.get(name)
+        if mod is None:
+            continue
+        feed(f"{name}/nabu-module.toml", mod.path / "nabu-module.toml")
+        overlay = mod.path / "kernel-overlay"
+        if overlay.is_dir():
+            for path in sorted(p for p in overlay.rglob("*") if p.is_file()):
+                feed(f"{name}/kernel-overlay/{path.relative_to(overlay)}", path)
+        for rel in mod.config_fragments:
+            feed(f"{name}/{rel}", mod.path / rel)
+    for rel in product.get("kernel_config", KERNEL_CONFIG_FRAGMENTS):
+        feed(rel, MAIN_DIR / rel)
+    for rel in product.get("config", []):
+        feed(rel, MAIN_DIR / rel)
+
+    return digest.hexdigest()[:8]
+
+
 def load_product(name: str) -> dict:
     path = MAIN_DIR / "products" / f"{name}.toml"
     if not path.is_file():
@@ -244,6 +281,9 @@ def load_product(name: str) -> dict:
     if not product.get("name") or not product.get("modules"):
         die(f"product {name}: missing name/modules")
     product["install"] = data.get("install", {})
+    # The release carries the content id, so a kernel and the modules it was
+    # built with always live in one /lib/modules tree of their own.
+    product["release"] = f"{product['release']}-{_release_content_id(product, discover(load_lock()))}"
     return product
 
 

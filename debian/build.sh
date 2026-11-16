@@ -1066,6 +1066,14 @@ build_uki() {
 	local os_release=$HERE/config/debian-os-release
 	[ -f "$ROOTFS/usr/lib/os-release" ] && os_release=$ROOTFS/usr/lib/os-release
 	local ukify_bin ukify_py
+	# rEFInd titles a UKI with the os-release embedded in it, so two kernels on
+	# the same ESP (current + rollback) would look identical.  Stamp the kernel
+	# release into it.
+	local uki_os_release=$HERE/work/ukify.os-release
+	mkdir -p "$HERE/work"
+	sed -e "s|^\(PRETTY_NAME=\"\)\(.*\)\(\"\)$|\1\2 — $KERNEL_RELEASE\3|" \
+		-e "s|^\(VERSION=\"\)\(.*\)\(\"\)$|\1\2 — $KERNEL_RELEASE\3|" \
+		"$os_release" > "$uki_os_release"
 	ukify_bin=$(command -v ukify) || die "ukify not found (install systemd-ukify)"
 	ukify_py=$(find_ukify_python)
 	# The template hardcodes root=PARTLABEL=linux; rewrite it so the UKI and
@@ -1087,7 +1095,7 @@ build_uki() {
 		--linux "$ART/Image" \
 		--devicetree "$ART/$DTB_NAME" \
 		--cmdline "@$cmdline" \
-		--os-release "@$os_release" \
+		--os-release "@$uki_os_release" \
 		--uname "$KERNEL_RELEASE" \
 		--sbat "@$MAIN/config/uki.sbat" \
 		--efi-arch aa64 \
