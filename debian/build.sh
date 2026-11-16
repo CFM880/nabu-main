@@ -326,8 +326,6 @@ stage_userspace_tree() {
 			"$stage/usr/local/libexec/iio-sensor-proxy-ssc"
 		install -m0755 "$ART/nabu-tablet-mode" \
 			"$stage/usr/local/libexec/nabu-tablet-mode"
-		install -m0755 "$ART/nabu-autobrightness" \
-			"$stage/usr/local/libexec/nabu-autobrightness"
 		[ -f "$ART/net.hadess.SensorProxy.conf" ] &&
 			install -m0644 "$ART/net.hadess.SensorProxy.conf" \
 				"$stage/usr/share/dbus-1/system.d/net.hadess.SensorProxy.conf"
@@ -651,17 +649,6 @@ overlay_nabu_userspace() {
 	install -m0644 "$m/nabu-accelerometer/config/nabu-tablet-mode.service" "$etc/systemd/system/"
 	install -m0644 "$m/nabu-accelerometer/config/nabu-sensors-suspend.service" "$etc/systemd/system/"
 	install -m0644 "$m/nabu-accelerometer/config/nabu-sensors-resume.service" "$etc/systemd/system/"
-	# Fixed-curve auto-brightness: a user unit enabled for every user's
-	# graphical session (systemd only follows symlinks in *.wants).
-	install -d -m0755 "$ROOTFS/etc/systemd/user/graphical-session.target.wants"
-	install -m0644 "$m/nabu-accelerometer/config/nabu-autobrightness.service" \
-		"$ROOTFS/etc/systemd/user/nabu-autobrightness.service"
-	ln -sf /etc/systemd/user/nabu-autobrightness.service \
-		"$ROOTFS/etc/systemd/user/graphical-session.target.wants/nabu-autobrightness.service"
-	# polkit: the daemon runs as the session user and has to claim the sensor.
-	install -d -m0755 "$ROOTFS/etc/polkit-1/rules.d"
-	install -m0644 "$m/nabu-accelerometer/config/50-nabu-autobrightness.rules" \
-		"$ROOTFS/etc/polkit-1/rules.d/50-nabu-autobrightness.rules"
 	# Power the SLPI/CDSP/ADSP down while the AP sleeps (see the script).
 	install -m0755 "$m/nabu-platform/system/nabu-dsp-sleep" "$ROOTFS/usr/local/libexec/"
 	install -m0644 "$m/nabu-platform/system/nabu-dsp-suspend.service" "$etc/systemd/system/"
