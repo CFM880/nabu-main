@@ -582,6 +582,11 @@ stage_modules_from_kernel() {
 		fi
 	done
 
+	# dpkg does not remove files the new package no longer ships, and a driver
+	# that moved from =m to =y (the panel, for one) would leave a stale .ko
+	# behind; start from an empty tree.
+	rm -rf "$ROOTFS/lib/modules/$KERNEL_RELEASE" "$ROOTFS/usr/lib/modules/$KERNEL_RELEASE"
+
 	install -m0644 "$deb" "$ROOTFS/tmp/nabu-kernel.deb"
 	chroot "$ROOTFS" dpkg -i /tmp/nabu-kernel.deb
 	rm -f "$ROOTFS/tmp/nabu-kernel.deb"
@@ -649,10 +654,6 @@ overlay_nabu_userspace() {
 	install -m0644 "$m/nabu-accelerometer/config/nabu-tablet-mode.service" "$etc/systemd/system/"
 	install -m0644 "$m/nabu-accelerometer/config/nabu-sensors-suspend.service" "$etc/systemd/system/"
 	install -m0644 "$m/nabu-accelerometer/config/nabu-sensors-resume.service" "$etc/systemd/system/"
-	# Power the SLPI/CDSP/ADSP down while the AP sleeps (see the script).
-	install -m0755 "$m/nabu-platform/system/nabu-dsp-sleep" "$ROOTFS/usr/local/libexec/"
-	install -m0644 "$m/nabu-platform/system/nabu-dsp-suspend.service" "$etc/systemd/system/"
-	install -m0644 "$m/nabu-platform/system/nabu-dsp-resume.service" "$etc/systemd/system/"
 
 	# GNOME automatic brightness: a per-user "gsettings set" does not survive a
 	# fresh install, so ship it as a system dconf default.  dconf only reads
@@ -698,8 +699,6 @@ overlay_nabu_userspace() {
 	ln -sf ../nabu-sensors-resume.service "$etc/systemd/system/suspend.target.wants/"
 	# suspend.target is activated before the sleep sequence runs, which is why
 	# the sensor quiesce units live there too.
-	ln -sf ../nabu-dsp-suspend.service "$etc/systemd/system/suspend.target.wants/"
-	ln -sf ../nabu-dsp-resume.service "$etc/systemd/system/suspend.target.wants/"
 
 	install -m0644 "$m/nabu-iris/system/qcom-iris.conf" "$etc/modprobe.d/qcom-iris.conf"
 	install -m0644 "$m/nabu-audio/config/nabu-audio.conf" "$etc/modules-load.d/nabu-audio.conf"
