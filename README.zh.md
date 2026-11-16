@@ -156,6 +156,9 @@ boot_label = "nabu-6.14.11-nabu-full"
 
 - `modules` 的顺序即组合 DTS 的 `#include` 顺序。
 - `audio-only.toml` 为迭代用产品，复用同一 `out/`。
+- `debug.toml` 是 production 加详细启动日志（`loglevel=8 initcall_debug
+  no_console_suspend pm_debug_messages`）；它使用独立 release，因此有自己的
+  `/lib/modules` 树和 ESP 入口，可以随时替换，而 production 始终可启动。
 
 ## 流水线
 

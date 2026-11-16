@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# Debug product: the production stack with verbose boot logging.
+#
+# Same modules and kernel config as production (which already enables
+# CONFIG_PM_DEBUG, CONFIG_PM_SLEEP_DEBUG and CONFIG_DYNAMIC_DEBUG); only the
+# command line differs, adding loglevel=8, initcall_debug, no_console_suspend
+# and pm_debug_messages.  It builds under its own release, so it owns its
+# module tree and its own ESP entry: production stays bootable next to it and
+# this is the entry to replace while tracing something.
+[product]
+name    = "debug"
+modules = ["nabu-platform", "nabu-display", "nabu-touchscreen", "nabu-iris", "nabu-audio", "nabu-accelerometer", "nabu-power"]
+release = "@kv@-nabu-full-debug"
+image   = true
+dtb     = "sm8150-xiaomi-nabu-debug.dtb"
+cmdline = "config/debug.cmdline"
+kernel_config = ["config/sm8150.config", "config/nabu-rtc.config", "config/nabu-debug.config"]
+sbat    = "config/uki.sbat"
+uki     = "nabu-debug.efi"
+
+[install]
+esp        = "/dev/disk/by-partlabel/esp"
+esp_mount  = "/boot/efi"
+uki_target = "EFI/debian/@kv@-nabu-full-debug.efi"
+boot_label = "nabu-@kv@-nabu-full-debug"

@@ -6,8 +6,9 @@ CDC-ACM function (`CONFIG_USB_CONFIGFS_ACM=y`) but **not** the legacy
 `CONFIG_USB_G_SERIAL`, so `/dev/ttyGS0` is only created once userspace builds
 the configfs gadget.  `nabu-platform` ships `nabu-usb-console.sh` +
 `nabu-usb-console.service` (enabled at `multi-user.target`) to do exactly that,
-and `config/debian.cmdline` carries `console=tty0 console=ttyGS0`, so kernel
-printk goes to the serial port as well as the panel.
+and `config/debian.cmdline` carries `console=tty0 ignore_loglevel`; add
+`console=ttyGS0` (as the removed `serial-debug` product did) if the serial
+output is wanted next to the panel.
 
 The ttyGS console carries `CON_PRINTBUFFER`: the whole boot ring buffer is
 replayed as soon as the gadget is created, so a hang that happens before USB
@@ -27,7 +28,8 @@ comes up is still visible.
   ```sh
   sudo systemctl start serial-getty@ttyGS0.service
   ```
-- The `serial-debug` product drops `nabu-power` (PM8150B SMB5 + LN8000), so
+- The `serial-debug` product (removed 2026-11-16; use the `debug` product or
+  add `console=ttyGS0` by hand instead) dropped `nabu-power` (PM8150B SMB5 + LN8000), so
   the downstream charger drivers cannot keep the Type-C port in host role or
   grab the HS PHY's D+/D- for APSD/QC detection.  With the charging stack out
   of the way the mainline `pm8150b` TCPM puts the port in device role when a

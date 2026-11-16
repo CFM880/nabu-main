@@ -1079,13 +1079,7 @@ build_uki() {
 	# The template hardcodes root=PARTLABEL=linux; rewrite it so the UKI and
 	# /etc/fstab (NABU_LABEL) always agree on the root partition.
 	local cmdline=$HERE/work/ukify.cmdline
-	# serial-debug uses its own command line (console=ttyGS0 + PM debug) so the
-	# nabu-serial gadget can carry the kernel console.  The product itself drops
-	# nabu-power so the USB-C port enumerates as a device.
 	local cmdline_template=$HERE/config/debian.cmdline
-	case $PRODUCT in
-	serial-debug) cmdline_template=$HERE/config/debian-serial.cmdline ;;
-	esac
 	mkdir -p "$HERE/work"
 	sed "s|root=PARTLABEL=[^ 	]*|root=PARTLABEL=$LABEL|" \
 		"$cmdline_template" >"$cmdline"

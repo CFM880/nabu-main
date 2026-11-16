@@ -165,6 +165,10 @@ boot_label = "nabu-6.14.11-nabu-full"
 
 - The order of `modules` is the `#include` order of the combined DTS.
 - `audio-only.toml` is a product for iteration and reuses the same `out/`.
+- `debug.toml` is production with verbose boot logging (`loglevel=8
+  initcall_debug no_console_suspend pm_debug_messages`); it builds under its own
+  release, so it gets its own `/lib/modules` tree and its own ESP entry and can be
+  replaced while production keeps booting.
 
 ## USB recovery console (not used)
 
