@@ -9,7 +9,7 @@
 # this is the entry to replace while tracing something.
 [product]
 name    = "debug"
-modules = ["nabu-platform", "nabu-display", "nabu-touchscreen", "nabu-iris", "nabu-audio", "nabu-accelerometer", "nabu-power"]
+modules = ["nabu-platform", "nabu-display", "nabu-touchscreen", "nabu-iris", "nabu-audio", "nabu-accelerometer", "nabu-power", "nabu-camera"]
 release = "@kv@-nabu-full-debug"
 image   = true
 dtb     = "sm8150-xiaomi-nabu-debug.dtb"
