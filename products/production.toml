@@ -3,7 +3,7 @@
 # one unified release, packaged as a single UKI (Image + composed DTB + cmdline).
 [product]
 name    = "production"
-modules = ["nabu-platform", "nabu-display", "nabu-touchscreen", "nabu-iris", "nabu-audio", "nabu-accelerometer", "nabu-power"]
+modules = ["nabu-platform", "nabu-display", "nabu-touchscreen", "nabu-iris", "nabu-audio", "nabu-accelerometer", "nabu-power", "nabu-camera"]
 release = "@kv@-nabu-full"
 image   = true
 dtb     = "sm8150-xiaomi-nabu-production.dtb"
