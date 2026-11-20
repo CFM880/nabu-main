@@ -18,7 +18,7 @@ KERNEL_OUT := $(shell $(NABU) outdir 2>/dev/null)
 KERNEL_OUT := $(if $(KERNEL_OUT),$(KERNEL_OUT),$(CURDIR)/out)
 .DEFAULT_GOAL := all
 
-.PHONY: all discover apply compose config build collect package verify install install-modules rollback switch clean distclean deb-kernel deb-host-check deb-install debian-img debian-rootfs debian-uki debian-clean debian-repair-ownership debian-flash-esp deploy deploy-flash
+.PHONY: all discover apply compose config build collect package verify install install-modules rollback switch clean distclean deb-kernel deb-host-check deb-install debian-img debian-rootfs debian-uki debian-clean debian-repair-ownership deploy deploy-flash
 
 # ---------------------------------------------------------------------------
 # Pipeline stages (discover -> ... -> verify) always run inside the build
@@ -81,7 +81,7 @@ distclean: clean
 	rm -rf artifacts
 
 # ---------------------------------------------------------------------------
-# Debian image (nabu-main/debian): rootfs + UKI + esp.img/linux.img.
+# Debian image (nabu-main/debian): rootfs + UKI + EFI.zip/linux.img.
 # By default it runs inside the build container (privileged, with network);
 # see docker/README.md and debian/README.md.  Set DEBIAN_DOCKER=0 to run the
 # scripts directly on the host instead.
@@ -144,11 +144,6 @@ FB_ROOT_PART ?= linux
 deploy-flash:
 	fastboot flash $(FB_ROOT_PART) debian/out/linux.img
 	fastboot reboot
-
-# Rebuild out/esp.img to the tablet's esp partition size, then flash it
-# (host-side; needs fastboot and the tablet's USB, tablet in fastboot mode).
-debian-flash-esp:
-	debian/flash-esp.sh $(ESP_ARGS)
 
 # ---------------------------------------------------------------------------
 # Kernel .debs from the tree that is currently in $(KERNEL_OUT) (out-6.14.11,

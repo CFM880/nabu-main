@@ -5,7 +5,7 @@ the Xiaomi Pad 5 (nabu) **Debian trixie arm64 + GNOME** system: the rootfs, the
 UKI and the flashable partition images.
 
 ```sh
-make debian-img        # rootfs + UKI + out/esp.img + out/linux.img + out/EFI.zip
+make debian-img        # rootfs + UKI + out/EFI.zip + out/linux.img
 make debian-rootfs     # rootfs tarball only
 make debian-uki        # rebuild out/nabu-debian.efi only (fast)
 make debian-clean      # remove debian/work and debian/out
@@ -42,9 +42,8 @@ and `debian/out` are reused. Force a fresh build with `make debian-clean` or
 | Path | Purpose |
 |---|---|
 | `build.sh` | rootfs (mmdebstrap) + optional input debs + `out/nabu-debian.efi` |
-| `make-img.sh` | `out/esp.img` / `out/linux.img` / `out/EFI.zip` + `flash*.sh` (uses fakeroot) |
+| `make-img.sh` | `out/EFI.zip` / `out/linux.img` (+ `out/esp.img` with `--esp-img`) + `flash*.sh` (uses fakeroot) |
 | `deploy.sh` | TWRP + fastboot deploy of the UKI/rootfs (single-system path) |
-| `flash-esp.sh` | detect the esp partition size (fastboot), rebuild `out/esp.img` to it, flash |
 | `fetch-efi.sh` | refresh `boot/nabu-dualboot-efi.zip` from the pinned releases |
 | `capture-serial.sh`, `serial_cmd.py` | USB CDC-ACM console capture / scripted console |
 | `repair-ownership.sh` | one-off rootfs ownership repair |
@@ -64,9 +63,9 @@ make deploy DEPLOY_ARGS=-y  # skip the confirmation
 `debian/deploy.sh` fastboot-boots the modded TWRP (`TWRP_IMG`), copies
 `out/EFI.zip` onto the ESP (`/esp` inside TWRP), sideloads `BOOTMANAGER_ZIP`
 (`installer_bootmanager_NOSB.zip`), reboots to fastboot, flashes `out/linux.img`
-to the `FB_ROOT_PART` partition (default `linux`) and reboots. It never flashes
-`esp.img` — that is built from scratch and would wipe the existing ESP boot
-chain. `TWRP_IMG`/`BOOTMANAGER_ZIP` default to `~/Downloads/nabu-ubuntu/`;
+to the `FB_ROOT_PART` partition (default `linux`) and reboots. The ESP partition
+is never imaged: the image is updated in place from `EFI.zip`, so the existing
+boot chain stays intact. `TWRP_IMG`/`BOOTMANAGER_ZIP` default to `~/Downloads/nabu-ubuntu/`;
 override them (and `EFI_ZIP`, `ROOT_IMG`, `FB_ROOT_PART`, `ESP_MNT`) via the
 environment. Put the tablet in fastboot first (power off, hold Vol- while
 plugging USB).
@@ -104,7 +103,7 @@ A complete image build for the current line is therefore:
 ```sh
 make PRODUCT=production             # apply -> ... -> package (kernel + UKI)
 make PRODUCT=production deb-kernel  # kernel/module debs for /lib/modules
-make PRODUCT=production debian-img  # rootfs + UKI + esp.img / linux.img
+make PRODUCT=production debian-img  # rootfs + UKI + EFI.zip / linux.img
 ```
 
 Run `make` first: the modules, the UKI and the release string must all come

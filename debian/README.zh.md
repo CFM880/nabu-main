@@ -41,7 +41,7 @@
 debian/
 ├── build.sh              构建输入包 / rootfs / UKI（rootfs 需要 root）
 ├── deploy.sh             写入 linux + 安装输入包 + 装 UKI + 建启动项（需要 root）
-├── make-img.sh           生成 esp.img / linux.img + flash 脚本（无需 root）
+├── make-img.sh           生成 EFI.zip / linux.img（+ 可选 esp.img）+ flash 脚本（无需 root）
 ├── capture-serial.sh     在 PC 上持续抓取 USB 串口日志（断线自动重连）
 ├── fetch-efi.sh          拉取/刷新双引导 EFI 负载（正常构建不需要）
 ├── boot/
@@ -62,8 +62,9 @@ debian/
 └── out/                  产物
     ├── nabu-debian-rootfs.tar.zst/gz
     ├── nabu-debian.efi
-    ├── esp.img         FAT32，含 rEFInd + Reboot2Android + Debian UKI
+    ├── EFI.zip         EFI/ 目录树（rEFInd + Reboot2Android + Debian UKI），解压到现有 ESP
     ├── linux.img       ext4，紧凑 rootfs（首次启动自动扩容）
+    ├── esp.img         仅 --esp-img 时生成（FAT32，从零安装用）
     ├── flash.sh        在平板内 dd 刷写
     ├── flash-fastboot.sh  在 PC 上用 fastboot 刷写
     └── SHA256SUMS / IMG-SHA256SUMS
@@ -148,7 +149,7 @@ sudo ./build.sh --clean           # 清空 work/ 与 out/ 后重建
 ```sh
 make PRODUCT=production             # apply → … → package（内核 + UKI）
 make PRODUCT=production deb-kernel  # /lib/modules 用的 kernel/module deb
-make PRODUCT=production debian-img  # rootfs + UKI + esp.img / linux.img
+make PRODUCT=production debian-img  # rootfs + UKI + EFI.zip / linux.img
 ```
 
 必须先 `make`：模块、UKI、release 字符串必须来自同一次构建；`make debian-img`
@@ -199,29 +200,28 @@ sudo ./deploy.sh --yes    # 免确认
 常用参数：`--no-format`（保留现有文件系统）、`--no-boot`（只写 rootfs）、
 `--no-rootfs`（只装 UKI）、`--no-input-debs`（不装输入包）、`--rootfs FILE`。
 
-## 生成可刷写镜像（esp.img / linux.img）
+## 生成可刷写镜像（EFI.zip / linux.img）
 
-采用与其他 nabu Linux 发行版（TheMojoMan / rodriguezst / Fedora / postmarketOS）相同的做法：
-**两个独立分区镜像**——`esp`（引导+双引导菜单）与 `linux`（rootfs）。`make-img.sh` 不需要 root：
-它会自动用 `fakeroot` 重建，以保留 root 属主（否则非 root 解包会把所有文件变成当前用户，
-`/usr/bin/sudo` 的 setuid 失效、`/etc/sudo.conf` 属主不对，导致用不了 sudo）；机器上没有
-`fakeroot` 时改用 `sudo ./make-img.sh`。
+与其他 nabu Linux 发行版（TheMojoMan / rodriguezst / Fedora / postmarketOS）一致：
+`linux.img` 是 rootfs 分区镜像；引导文件不再单独做成 `esp.img`，而是打成 **`EFI.zip`**，
+解压到**现有的 ESP** 上（ESP 里已经有原厂/双引导链，重刷整块分区会把它抹掉）。
+`make-img.sh` 不需要 root：它会自动用 `fakeroot` 重建，以保留 root 属主（否则非 root 解包会把
+所有文件变成当前用户，`/usr/bin/sudo` 的 setuid 失效）；机器上没有 `fakeroot` 时改用
+`sudo ./make-img.sh`。
 
 ```sh
-./make-img.sh                    # 生成 out/linux.img、out/esp.img、两个 flash 脚本
-./make-img.sh --esp-only
-./make-img.sh --linux-only
-./make-img.sh --no-dualboot      # ESP 只放 Debian UKI（不做 Android 双引导）
-ESP_SIZE=350105600 ./make-img.sh --esp-only   # 固定 esp 镜像大小（字节；默认按内容紧凑生成）
+./make-img.sh                    # 生成 out/EFI.zip、out/linux.img、两个 flash 脚本
+./make-img.sh --efi-only         # 只生成 EFI.zip
+./make-img.sh --linux-only       # 只生成 linux.img
+./make-img.sh --no-dualboot      # EFI 树只放 Debian UKI（不做 Android 双引导）
+./make-img.sh --esp-img          # 额外生成 out/esp.img（从零安装时才需要）
 ```
 
-- `out/esp.img`：FAT32、卷标 `ESPNABU`，**按内容紧凑生成**（当前约 64 MiB，只比文件大一点），
-  所以能刷进任何足够大的 `esp` 分区；要固定大小用 `ESP_SIZE=<字节>`。**默认做成双引导**，
-  内容与其他 nabu 发行版一致：
+- `out/EFI.zip`：`EFI/` 目录树，解压到现有 ESP 根目录即可。**默认双引导**：
   - `EFI/BOOT/bootaa64.efi`：rEFInd（菜单由 `config/refind.conf` 定义）；
   - `EFI/BOOT/drivers_aa64/`、`icons/`、`themes/`、`vars/`；
   - `EFI/Android/Reboot2Android.efi`：菜单里的 “Reboot to Android”；
-  - `EFI/nabu/nabu-debian.efi`：Debian UKI。
+  - `EFI/debian/nabu-debian.efi`：Debian UKI。
 
   这些 EFI 负载已内置在 `boot/nabu-dualboot-efi.zip`（来源与校验和见 `boot/SOURCE.md`），
   构建时**不需要联网**；要升级负载可运行 `./fetch-efi.sh`。
@@ -229,9 +229,10 @@ ESP_SIZE=350105600 ./make-img.sh --esp-only   # 固定 esp 镜像大小（字节
   用 `mkfs.ext4 -d` 直接填充（e2fsprogs ≥ 1.47），无需 root/挂载。
   **不是**整个分区大小；写入分区后由 fstab 里的 `x-systemd.growfs` 在首次启动时自动扩容，
   `flash.sh` 也会先做一次 `resize2fs`。
-- `out/flash-fastboot.sh`：在 **PC** 上运行，`fastboot flash esp/linux` + 重启，
-  与参考发行版的安装方式一致。
-- `out/flash.sh`：在**平板内**运行，dd 两个镜像、扩容、并建立 UEFI 启动项。
+- `out/esp.img`（仅 `--esp-img`）：FAT32、卷标 `ESPNABU`，按内容紧凑生成，
+  写入后即抹掉 ESP 现有内容——只在全新安装时用。
+- `out/flash-fastboot.sh`：在 **PC** 上运行，`fastboot flash linux` + 重启。
+- `out/flash.sh`：在**平板内**运行，dd `linux.img`、扩容，并（若 ESP 上已有 UKI）建立 UEFI 启动项。
 
 ### 用 fastboot 刷写（PC，推荐）
 
@@ -240,24 +241,16 @@ ESP_SIZE=350105600 ./make-img.sh --esp-only   # 固定 esp 镜像大小（字节
 fastboot devices
 ./out/flash-fastboot.sh
 # 等价的单条命令：
-#   fastboot flash esp   out/esp.img
 #   fastboot flash linux out/linux.img
 fastboot reboot
 ```
 
-`esp.img` 默认是紧凑的（约 64 MiB，只比内容大一点）。若想让它**铺满整个 esp 分区**
-（后续能手动放更多引导项），先探测分区大小、按该大小重建、再刷：
+引导文件不再刷整块 ESP：把 `out/EFI.zip` 解压到现有 ESP 上即可（TWRP 里挂载 `/esp`
+后 `unzip`，或直接用 `make deploy`，它会先拷 `EFI.zip` 再刷 `linux.img`）。
 
-```sh
-debian/flash-esp.sh            # = fastboot getvar partition-size:esp -> 重建 -> flash esp
-# 或：make debian-flash-esp
-# 只重建不刷：debian/flash-esp.sh --no-flash
-```
-
-> 分区名可用 `FB_ESP_PART` / `FB_ROOT_PART` 覆盖；两者默认都跟随构建时的 `NABU_LABEL`
-> （未设置时为 `linux`），这样 `root=PARTLABEL=$NABU_LABEL`（cmdline/fstab）与
-> `fastboot flash` 的目标始终是同一个分区，不会写错。**本机当前按 `NABU_LABEL=debian`
-> 构建**，所以默认刷的就是 `debian` 分区，Ubuntu 的 `linux` 分区永远不会被碰到。
+> 分区名可用 `FB_ROOT_PART` 覆盖，默认跟随构建时的 `NABU_LABEL`
+> （未设置时为 `linux`），这样 `root=PARTLABEL=$NABU_LABEL` 与 `fastboot flash`
+> 的目标始终是同一个分区，不会写错。
 
 ### 在平板内 dd 刷写
 
@@ -270,16 +263,16 @@ sudo out/flash.sh
 ```sh
 sudo dd if=out/linux.img of=/dev/disk/by-partlabel/linux bs=4M status=progress conv=fsync
 sudo e2fsck -fy /dev/disk/by-partlabel/linux && sudo resize2fs /dev/disk/by-partlabel/linux
-sudo dd if=out/esp.img   of=/dev/disk/by-partlabel/esp  bs=4M status=progress conv=fsync
+# 引导部分：解压 EFI.zip 到已挂载的 ESP
+sudo mount /dev/disk/by-partlabel/esp /mnt && sudo unzip -o out/EFI.zip -d /mnt && sudo umount /mnt
 ```
 
-> **启动机制 / Android 双引导**：`esp.img` 内的 rEFInd 是 ESP 的默认引导器
-> （`\EFI\BOOT\BOOTAA64.EFI`）。要让固件开机进入 rEFInd（从而在 Debian 与 Android 间选择），
-> 需先用 TWRP/Magisk 刷一次 rodriguezst 的引导补丁
-> （`installer_bootmanager_NOSB.zip`，即 TheMojoMan / Fedora 教程里的 DualBootKernelPatcher）：
-> 冷启动进入 UEFI→rEFInd；选 “Reboot to Android” 时 `Reboot2Android.efi` 写入标记并热重启回到
-> Android 内核。`linux.img` 只含根分区内容，不含引导链（`xbl/abl`）；**不要整盘 dd**，
-> 否则会破坏设备的 Android 引导链。刷写 `esp.img` 会替换 ESP 上原有的 rEFInd/引导文件，请先备份。
+> **启动机制 / Android 双引导**：ESP 上的 rEFInd（`\EFI\BOOT\BOOTAA64.EFI`）是默认引导器。
+> 要让固件开机进入 rEFInd（从而在 Debian 与 Android 间选择），需先用 TWRP/Magisk 刷一次
+> rodriguezst 的引导补丁（`installer_bootmanager_NOSB.zip`）：冷启动进入 UEFI→rEFInd；
+> 选 “Reboot to Android” 时 `Reboot2Android.efi` 写入标记并热重启回到 Android 内核。
+> `linux.img` 只含根分区内容，不含引导链（`xbl/abl`）；**不要整盘 dd**，否则会破坏 Android
+> 引导链。`EFI.zip` 只覆盖 `EFI/` 下的引导文件，不动分区表。
 
 ## 本机实际分区布局（从 linux 切出的 debian 分区）
 
@@ -473,7 +466,7 @@ PM8150B 的 ABL 默认值，可能很慢）。要恢复充电就把这两个改�
 
 ```sh
 sudo ./build.sh --uki-only
-sudo ./deploy.sh --no-rootfs        # 或重新生成 esp.img
+sudo ./deploy.sh --no-rootfs        # 或重新生成 EFI.zip 并解压到 ESP
 ```
 
 > **前提是内核本身带了 `CONFIG_USB_G_SERIAL=y`。** 改的是 `nabu-main`，先在那边
@@ -763,9 +756,9 @@ sudo ./deploy.sh --no-rootfs        # 或重新生成 esp.img
   未处于异常状态。
 - `make-img.sh` 报 `dual-boot EFI payload not found`：确认 `boot/nabu-dualboot-efi.zip`
   存在，或运行 `./fetch-efi.sh`，或用 `--no-dualboot` 生成单系统 ESP。
-- `fastboot flash esp` 失败 / 报分区太小：`out/esp.img` 比设备 `esp` 分区大（老版本默认
-  1 GiB）。现在 `esp.img` 默认按内容紧凑生成（约 64 MiB），重新 `./make-img.sh --esp-only`
-  即可；要固定大小用 `ESP_SIZE=<esp分区字节> ./make-img.sh --esp-only`。
+- 需要 `esp.img` 时（`--esp-img`）报分区太小：镜像按内容紧凑生成（约 64 MiB），
+  要固定大小用 `ESP_SIZE=<esp分区字节> ./make-img.sh --esp-img`。日常更新不用 `esp.img`，
+  把 `out/EFI.zip` 解压到现有 ESP 即可。
 - 启动项创建失败：确认 `efibootmgr` 可用且 ESP 为 `PARTLABEL=esp`；也可在 rEFInd 里
   直接启动，或在 UEFI Shell 里手动 `fs0:` → `\EFI\BOOT\bootaa64.efi`。
 - `--uki-only` 报 `ModuleNotFoundError: No module named 'pefile'`：当前 PATH 的 `python3`

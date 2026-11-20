@@ -44,7 +44,7 @@ sudo make rollback       # 回滚到安装前状态
 | `make install-modules` | 只装模块与用户态，不动 ESP / 启动项 |
 | `make rollback` | 按安装清单逆序恢复 |
 | `make clean` / `distclean` | 删除 `out/` / 同时删除 `artifacts/` |
-| `make debian-img` | 在容器里构建 Debian trixie arm64 镜像(rootfs + UKI + `esp.img`/`linux.img`) |
+| `make debian-img` | 在容器里构建 Debian trixie arm64 镜像(rootfs + UKI + `EFI.zip`/`linux.img`) |
 | `make debian-rootfs` / `make debian-uki` | 只做 Debian rootfs tar / 只做 UKI |
 
 切换产品：`make PRODUCT=audio-only ...`。
@@ -182,7 +182,7 @@ rollback  按清单逆序恢复文件与模块树，撤销 UKI 启动项
 
 `.github/workflows/image.yml` 在 GitHub runner 上用与本地完全相同的脚本
 （`docker/build-image.sh`、`make`、`make debian-img`）产出可刷写的镜像
-（`linux.img`、`esp.img`、`EFI.zip`）：
+（`linux.img`、`EFI.zip`）：
 
 - job 先重建 `scripts/nabu` 需要的目录布局（模块仓和内核树与 `nabu-main` 平级），
   模块按 `repos.lock` 为当前内核线选择的**分支**检出，内核检出到 `[kernel] base`

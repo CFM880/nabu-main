@@ -48,7 +48,7 @@ Common targets:
 | `make install-modules` | Install only modules and userspace, without touching the ESP / boot entries |
 | `make rollback` | Restore in reverse order per the install manifest |
 | `make clean` / `distclean` | Delete `out/` / also delete `artifacts/` |
-| `make debian-img` | Build the Debian trixie arm64 image (rootfs + UKI + `esp.img`/`linux.img`) in the container |
+| `make debian-img` | Build the Debian trixie arm64 image (rootfs + UKI + `EFI.zip`/`linux.img`) in the container |
 | `make debian-rootfs` / `make debian-uki` | Debian rootfs tarball only / UKI only |
 
 Switch product: `make PRODUCT=audio-only ...`.
@@ -203,7 +203,7 @@ rollback  restore files and the module tree in reverse order per the manifest, r
 ## Building the image in CI
 
 `.github/workflows/image.yml` produces the flashable image (`linux.img`,
-`esp.img`, `EFI.zip`) on a GitHub runner with the same scripts a local build
+`EFI.zip`, `linux.img`) on a GitHub runner with the same scripts a local build
 uses - `docker/build-image.sh`, `make`, `make debian-img`:
 
 - the job recreates the workspace layout `scripts/nabu` expects (module
