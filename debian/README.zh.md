@@ -527,27 +527,29 @@ sudo ./deploy.sh --no-rootfs        # 或重新生成 esp.img
   nabu 没有 WWAN，`ModemManager.service` 与 `qcom-modem-setup.service` 会去戳这块 modem
   导致固件 fatal-error 循环崩溃——镜像里已 mask 掉，并装了 `rmtfs`/`qrtr-tools`（modem EFS）。
   （注意：运行中 `echo stop > /sys/class/remoteproc/remoteproc1/state` 会硬挂机，勿做。）
-- **WiFi MAC 每次开机随机 → IP 跟着漂（2026-10-08 修复）**：这块 WCN3990 **没有烧录 MAC**，
-  `ath10k_snoc` 每次开机打 `invalid MAC address; choosing random`（设备树里 0 个
-  `local-mac-address` 节点、`/persist` 为空、蓝牙 `BD Address` 同样是本地管理位=1 的假地址）。
-  路由器按 MAC 发 DHCP 租约，于是**每重启一次 = 换一个 MAC = 换一条租约 = 换一个 IP**
-  （实测 `.67 ↔ .68`）。两个容易误判的点：① 单次开机内 IP **不会**变——`boot -2` 连开 6 个月、
-  跨多次重连始终 `.67`，漂移只发生在**重启**那一刻；② NM 日志里
-  `set MAC address to XX (scanning)` 是**每次扫描换一个**的临时地址，扫完立刻
-  `reset ... (preserve)` 还原，**不参与 DHCP**，别把它当成根因。修在**全局**（不然换个 SSID
-  就得再改一次 profile）：
-  - `/etc/NetworkManager/conf.d/10-nabu-fixed-mac.conf`
-    `[connection] wifi.cloned-mac-address=02:00:0C:79:07:42`（所有 WiFi 连接档案的默认值，
-    含以后新建的）+ `[device] wifi.scan-rand-mac-address=no`（扫描阶段也不换 MAC）。
-    这两个键都在 `NetworkManager.conf(5)` 的 Supported Properties / `[device]` 清单里。
-  - `/etc/udev/rules.d/99-nabu-fixed-wlan-mac.rules`：网卡 `add` 时就
-    `/usr/bin/ip link set dev %k address 02:00:0c:79:07:42`，不依赖 NetworkManager 是否接管
-    （注意 `ip` 装在 **`/usr/bin/ip`**，规则里写 `/usr/sbin/ip` 会找不到）。
-  - `SPAX-office` 与 `vivo` 两个 profile 的 `cloned-mac-address` 都**留空**，全靠全局默认。
+- **WiFi MAC 每次开机随机 → IP 跟着漂（2026-10-08 修复，2026-11-20 改为每机唯一）**：
+  这块 WCN3990 **没有烧录 MAC**，`ath10k_snoc` 每次开机打
+  `invalid MAC address; choosing random`（设备树里 0 个 `local-mac-address` 节点、`/persist`
+  为空、蓝牙 `BD Address` 同样是本地管理位=1 的假地址）。路由器按 MAC 发 DHCP 租约，于是
+  **每重启一次 = 换一个 MAC = 换一条租约 = 换一个 IP**（实测 `.67 ↔ .68`）。两个容易误判的点：
+  ① 单次开机内 IP **不会**变——`boot -2` 连开 6 个月、跨多次重连始终 `.67`，漂移只发生在
+  **重启**那一刻；② NM 日志里 `set MAC address to XX (scanning)` 是**每次扫描换一个**的临时
+  地址，扫完立刻 `reset ... (preserve)` 还原，**不参与 DHCP**，别把它当成根因。
+  - **2026-10-08 的旧修法（已废弃）**：镜像里写死一个
+    `02:00:0C:79:07:42`（`[connection] wifi.cloned-mac-address=` + 一条 udev 规则）。
+    单机确实稳定，但**同一份镜像刷出来的所有平板会用同一个 MAC**，同一网络里必然冲突 ✗。
+  - **现在的做法（`nabu-platform`）**：`/usr/local/libexec/nabu-wifi-mac` 用
+    **SoC 序列号**（`/sys/devices/soc0/serial_number`，回退到 DT `serial-number`、
+    网卡 `serial`、`machine-id`）的 sha256 前 5 字节派生地址，并把首字节置为
+    **本地管理位（`02:...`）**、保持单播 ⇒ 每台机器唯一、跨重启稳定、不会撞真实 OUI ✓。
+    `99-nabu-wifi-mac.rules` 在网卡 `add` 事件（NetworkManager 接管之前）执行
+    `ip link set dev wlanX address <派生值>` ✓。
+  - `/etc/NetworkManager/conf.d/10-nabu-fixed-mac.conf` 现在只写
+    `[connection] wifi.cloned-mac-address=preserve`（让 NM **保留** udev 设好的地址）+
+    `[device] wifi.scan-rand-mac-address=no`（扫描阶段也不换 MAC）✓。
+  - 想指定固定地址仍可用 `NABU_WIFI_MAC`（构建时），或直接给脚本设同名环境变量。
   改 `conf.d` 要 `sudo systemctl restart NetworkManager` 才生效（日志 `Read config:` 里能看到）。
-  **已验证（2026-10-08 11:08 重启）**：驱动照旧打 `choosing random`，但落盘 MAC 恒为
-  `02:00:0c:79:07:42`，租约 2/2 = `192.168.0.67`，NTP 已同步、失败单元 0 个、启动 10.7 s。
-  **随机性与种子质量都已实锤**：三次开机三个不同值——`02:00:0C:79:07:42`(08:05)、
+**随机性与种子质量都已实锤**：三次开机三个不同值——`02:00:0C:79:07:42`(08:05)、
   `A6:D8:E0:1A:1A:92`(10:26)、`ea:f6:2e:de:12:97`(11:39)，最后一个取自
   `/sys/class/ieee80211/phy0/macaddress`（= `SET_IEEE80211_PERM_ADDR` 写进 phy 的驱动
   原始值，`netdev` 上看到的只是我们覆盖后的地址）。这平台**没有硬件随机源**

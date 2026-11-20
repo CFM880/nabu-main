@@ -874,28 +874,27 @@ EOF
 			"$ROOTFS/lib/firmware/ath10k/WCN3990/hw1.0/wlanmdsp.mbn"
 	fi
 
-	# --- stable WiFi MAC ------------------------------------------------------
-	# The WCN3990 has no burned-in MAC: ath10k_snoc picks a random one every
-	# boot ("invalid MAC address; choosing random"), so the router hands out a
-	# fresh DHCP lease/IP each reboot.  Pin it via the NetworkManager default
-	# for every connection (scanning included) and a udev rule as a fallback
-	# that does not depend on NetworkManager.  Override the address with
-	# NABU_WIFI_MAC.
-	local wifi_mac=${NABU_WIFI_MAC:-02:00:0c:79:07:42}
+	# --- stable, per-device WiFi MAC -----------------------------------------
+	# The WCN3990 has no burned-in MAC (ath10k_snoc: "invalid MAC address;
+	# choosing random"), so nabu-platform ships 99-nabu-wifi-mac.rules plus
+	# /usr/local/libexec/nabu-wifi-mac, which derive a stable address from the
+	# SoC serial before NetworkManager activates the interface.  Never bake one
+	# fixed address into the image: every tablet flashed from it would collide
+	# on the same network.  NetworkManager must leave that address alone
+	# (preserve) and must not randomise it while scanning.
 	install -d -m0755 "$etc/NetworkManager/conf.d"
 	cat >"$etc/NetworkManager/conf.d/10-nabu-fixed-mac.conf" <<EOF
-# Nabu WCN3990 has no burned-in MAC; keep it stable so DHCP leases/IPs do not
-# drift across reboots.  Applies to every WiFi connection, including future
-# ones, and disables scan-time address randomisation too.
+# The address is set per device by udev (nabu-platform, 99-nabu-wifi-mac.rules)
+# from the SoC serial.  Preserve it on every connection and do not randomise it
+# during scans, so the DHCP lease survives reboots.
 [connection]
-wifi.cloned-mac-address=$wifi_mac
+wifi.cloned-mac-address=preserve
 [device]
 wifi.scan-rand-mac-address=no
 EOF
-	cat >"$etc/udev/rules.d/99-nabu-fixed-wlan-mac.rules" <<EOF
-# Fallback that does not depend on NetworkManager; note ip is /usr/bin/ip.
-SUBSYSTEM=="net", ACTION=="add", KERNEL=="wlan*", RUN+="/usr/bin/ip link set dev %k address $wifi_mac"
-EOF
+	# Older images pinned one fixed address in this rule; it must not stay
+	# behind to override the per-device one.
+	rm -f "$etc/udev/rules.d/99-nabu-fixed-wlan-mac.rules"
 
 	install -m0644 "$m/nabu-audio/config/51-nabu-mic-s16.conf" "$etc/alsa/conf.d/"
 

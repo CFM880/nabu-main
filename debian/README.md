@@ -110,7 +110,7 @@ is the documented order.)
 | `NABU_HOSTNAME` / `NABU_USER` / `NABU_PASSWORD` | `nabu-debian` / `nabu` / `nabu` | identity (only used when `NABU_INITIAL_SETUP=0`) |
 | `NABU_INITIAL_SETUP` | `1` | `1` = no pre-created user; GDM runs gnome-initial-setup on first boot (`0` = pre-create `NABU_USER`) |
 | `NABU_LABEL` | `linux` | root partition PARTLABEL |
-| `NABU_WIFI_MAC` | `02:00:0c:79:07:42` | fixed WiFi MAC (the WCN3990 has none; keeps DHCP/IPs stable) |
+| `NABU_WIFI_MAC` | *(unset)* | override the per-device WiFi MAC; by default it is derived from the SoC serial at boot (the WCN3990 has none) |
 | `NABU_MIC_KEEPALIVE` | `0` | enable the experimental always-on mic client (makes the mic look permanently recording) |
 
 The full device/deploy documentation (partitioning, flashing, WiFi/audio/RTC
