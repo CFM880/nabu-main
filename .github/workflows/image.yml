@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-only
 #
-# Build the flashable Debian image (linux.img / esp.img / EFI.zip) with the same
+# Build the flashable Debian image (linux.img / EFI.zip) with the same
 # scripts a developer runs locally, inside the project's builder container.
 #
 # Everything here targets aarch64, so the job runs on an arm64 runner: the
@@ -170,7 +170,7 @@ jobs:
         run: |
           set -euo pipefail
           zstd -T0 -3 -f --rm linux.img -o linux.img.zst
-          sha256sum linux.img.zst esp.img EFI.zip nabu-debian.efi > IMG-SHA256SUMS
+          sha256sum linux.img.zst EFI.zip nabu-debian.efi > IMG-SHA256SUMS
           ls -lh
 
       - name: Upload the image
@@ -179,7 +179,6 @@ jobs:
           name: nabu-${{ env.PRODUCT }}-image
           path: |
             nabu-linux/nabu-main/debian/out/linux.img.zst
-            nabu-linux/nabu-main/debian/out/esp.img
             nabu-linux/nabu-main/debian/out/EFI.zip
             nabu-linux/nabu-main/debian/out/nabu-debian.efi
             nabu-linux/nabu-main/debian/out/flash.sh
@@ -199,7 +198,7 @@ jobs:
         run: |
           set -euo pipefail
           limit=$((1900 * 1024 * 1024))
-          assets=(esp.img EFI.zip nabu-debian.efi flash.sh flash-fastboot.sh IMG-SHA256SUMS)
+          assets=(EFI.zip nabu-debian.efi flash.sh flash-fastboot.sh IMG-SHA256SUMS)
           if [ "$(stat -c %s linux.img.zst)" -le "$limit" ]; then
             assets+=(linux.img.zst)
           else
@@ -210,8 +209,8 @@ jobs:
           split into linux.img.zst.part-* files.  Put it back together with:
 
               cat linux.img.zst.part-* > linux.img.zst
+              sha256sum linux.img.zst         # must match IMG-SHA256SUMS
               unzstd linux.img.zst
-              sha256sum -c IMG-SHA256SUMS     # linux.img is checked separately
           EOF
             assets+=(linux.img.zst.part-* REASSEMBLE.txt)
           fi
@@ -222,13 +221,14 @@ jobs:
           nabu-main \`$commit\` by .github/workflows/image.yml.
 
           - \`linux.img.zst\`: the root filesystem, grows to its partition on first boot
-          - \`esp.img\`: the ESP as a disk image (\`EFI.zip\` is the same tree as a zip)
+          - \`EFI.zip\`: the boot tree (rEFInd + Reboot2Android + the UKI), extract it
+            onto the existing ESP - the partition image is no longer shipped
           - \`nabu-debian.efi\`: the UKI on its own
           - \`flash.sh\` / \`flash-fastboot.sh\`: the helpers from \`debian/out\`
           - checksums in \`IMG-SHA256SUMS\`
 
-          Write them with the helpers (\`sudo ./flash.sh /dev/sdX\`) or copy
-          \`linux.img\` and \`esp.img\` to their partitions by hand.
+          Flash \`linux.img\` to the linux partition with the helpers or fastboot, then
+          unzip \`EFI.zip\` onto the ESP (TWRP, or \`mcopy -s -o -i /dev/sda31 EFI ::/\`).
           EOF
           notes=$(cat RELEASE-NOTES.txt)
 
