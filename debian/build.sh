@@ -929,6 +929,18 @@ EOF
 	# behind to override the per-device one.
 	rm -f "$etc/udev/rules.d/99-nabu-fixed-wlan-mac.rules"
 
+	# --- VA-API: the Iris VPU driver is the only implementation on this board --
+	# Mesa's msm/freedreno VA-API driver cannot drive the VPU and only
+	# vpu_drv_video.so is installed; without this libva fails to open a driver
+	# and every application falls back to software decoding.  The module also
+	# ships the same values as an environment.d drop-in for the user session.
+	if ! grep -q '^LIBVA_DRIVER_NAME=' "$etc/environment" 2>/dev/null; then
+		{
+			echo "LIBVA_DRIVER_NAME=vpu"
+			echo "VPU_PLATFORM=qcom-iris"
+		} >> "$etc/environment"
+	fi
+
 	install -m0644 "$m/nabu-audio/config/51-nabu-mic-s16.conf" "$etc/alsa/conf.d/"
 
 	# --- microphone keepalive (opt-in) ----------------------------------------
