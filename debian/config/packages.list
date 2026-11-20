@@ -46,6 +46,9 @@ qrtr-tools
 tqftpserv
 # cameras / video
 v4l-utils
+# vainfo: VA-API validation tool used by the iris docs (Debian package name
+# is "vainfo", built from the libva-utils source)
+vainfo
 libcamera-tools
 # firmware helpers are unnecessary (firmware is overlaid from the host tree),
 # but make sure a package manager tool is present for user installs.
