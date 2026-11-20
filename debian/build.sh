@@ -385,26 +385,50 @@ root, stage = Path(sys.argv[1]), Path(sys.argv[2])
 SKIP = ("/lib/modules/", "/lib/firmware/")
 
 
-def source_for(moddir, key, artifacts):
+# Install keys are prefixed with the provides list they come from
+# (systemd/, rules/, userspace/, ...); the files themselves usually live under
+# config/ or libexec/, so resolve them through the module's provides list - the
+# same way scripts/nabu's install_source() does.
+PREFIXES = {
+	"systemd/": "systemd",
+	"modules_load/": "modules_load",
+	"firmware/": "firmware",
+	"userspace/": "userspace",
+	"rules/": "rules",
+}
+
+
+def source_for(moddir, key, artifacts, provides):
 	what = artifacts.get(key)
-	if what is None:
-		return moddir / key
-	if what.startswith("module:"):
-		return moddir / what[len("module:"):]
-	if what.startswith("out:"):
-		# Kernel build output; installed below /lib/modules separately.
+	if what is not None:
+		if what.startswith("module:"):
+			return moddir / what[len("module:"):]
+		if what.startswith("out:"):
+			# Kernel build output; installed below /lib/modules separately.
+			return None
+		return moddir / what
+	for prefix, field in PREFIXES.items():
+		if not key.startswith(prefix):
+			continue
+		base = Path(key[len(prefix):]).name
+		entries = provides.get(field)
+		if isinstance(entries, list):
+			for rel in entries:
+				if Path(rel).name == base:
+					return moddir / rel
 		return None
-	return moddir / what
+	return moddir / key
 
 
 for toml in sorted(root.glob("*/nabu-module.toml")):
 	with open(toml, "rb") as handle:
 		data = tomllib.load(handle)
 	artifacts = data.get("artifacts", {}) or {}
+	provides = data.get("provides", {}) or {}
 	for key, target in (data.get("install", {}) or {}).items():
 		if any(target.startswith(prefix) for prefix in SKIP):
 			continue
-		src = source_for(toml.parent, key, artifacts)
+		src = source_for(toml.parent, key, artifacts, provides)
 		if src is None or not src.is_file():
 			continue
 		dst = stage / target.lstrip("/")
