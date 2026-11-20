@@ -140,8 +140,8 @@ hook 只负责产出本模块声明的产物，不得改动其它模块或全局
 ```toml
 [product]
 name    = "production"
-modules = ["nabu-iris", "nabu-camera", "nabu-audio", "nabu-accelerometer", "nabu-power"]
-release = "6.14.11-nabu-full"        # 所有模块共用，保证 vermagic 一致
+modules = ["nabu-platform", "nabu-display", "nabu-touchscreen", "nabu-iris", "nabu-camera", "nabu-audio", "nabu-accelerometer", "nabu-power"]
+release = "@kv@-nabu-full"           # @kv@ 换成内核版本；构建时再追加内容哈希
 image   = true
 dtb     = "sm8150-xiaomi-nabu-production.dtb"
 cmdline = "config/production.cmdline"
@@ -152,8 +152,8 @@ uki     = "nabu-production.efi"
 [install]                          # 产品级 UKI 安装
 esp        = "/dev/disk/by-partlabel/esp"
 esp_mount  = "/boot/efi"
-uki_target = "EFI/ubuntu/6.14.11-nabu-full-build1.efi"
-boot_label = "nabu-6.14.11-nabu-full"
+uki_target = "EFI/ubuntu/@kv@-nabu-full-build1.efi"
+boot_label = "nabu-@kv@-nabu-full"
 ```
 
 - `modules` 的顺序即组合 DTS 的 `#include` 顺序。
