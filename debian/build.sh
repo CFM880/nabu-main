@@ -992,10 +992,43 @@ EOF
 	install -m0644 "$m/nabu-audio/config/ucm2/Xiaomi/nabu/HiFi.conf" \
 		"$ucm/Xiaomi/nabu/HiFi.conf"
 
-	install -m0644 "$m/nabu-camera/camera-tuning/ov13b10.yaml" \
-		"$ROOTFS/usr/share/libcamera/ipa/simple/"
-	install -m0644 "$m/nabu-camera/camera-tuning/ov8856.yaml" \
-		"$ROOTFS/usr/share/libcamera/ipa/simple/"
+	# --- camera: libcamera 0.5 + the patched PipeWire SPA plugin -----------
+	# Debian trixie ships libcamera 0.4, which has no lens/AF support and
+	# rejects the Ccm/Lut entries of our tuning, so the simple IPA fails to
+	# initialise and the camera delivers no frames at all.  The 0.5.2 stack
+	# built by nabu-camera (scripts/build-libcamera-0.5.sh) lives under
+	# /usr/local and is selected through ld.so + GST_PLUGIN_PATH, exactly
+	# like scripts/install-libcamera-0.5.sh does on a running system.
+	# Inputs (publish them as assets of the "image-inputs" release):
+	#   libcamera-0.5.2-arm64.tar.gz    - built by nabu-camera
+	#   libspa-libcamera-0.5-arm64.so   - PipeWire plugin built against it
+	local lc_tar=${NABU_LIBCAMERA_TARBALL:-$PACKAGES_DIR/libcamera-0.5.2-arm64.tar.gz}
+	local lc_spa=${NABU_PIPEWIRE_LIBCAMERA_SO:-$PACKAGES_DIR/libspa-libcamera-0.5-arm64.so}
+	if [ -f "$lc_tar" ]; then
+		log "camera: libcamera 0.5 stack from $(basename "$lc_tar")"
+		install -d -m0755 "$ROOTFS/usr/local" "$ROOTFS/etc/ld.so.conf.d"
+		tar -C "$ROOTFS/usr/local" -xzf "$lc_tar"
+		echo /usr/local/lib/aarch64-linux-gnu \
+			> "$ROOTFS/etc/ld.so.conf.d/nabu-libcamera.conf"
+		install -d -m0755 "$ROOTFS/usr/local/share/libcamera/ipa/simple"
+		install -m0644 "$m/nabu-camera/camera-tuning/ov13b10.yaml" \
+			"$ROOTFS/usr/local/share/libcamera/ipa/simple/"
+		install -m0644 "$m/nabu-camera/camera-tuning/ov8856.yaml" \
+			"$ROOTFS/usr/local/share/libcamera/ipa/simple/"
+		grep -q '^GST_PLUGIN_PATH=' "$ROOTFS/etc/environment" 2>/dev/null ||
+			echo "GST_PLUGIN_PATH=/usr/local/lib/aarch64-linux-gnu/gstreamer-1.0" \
+				>> "$ROOTFS/etc/environment"
+		if [ -f "$lc_spa" ]; then
+			log "camera: PipeWire SPA plugin from $(basename "$lc_spa")"
+			install -m0644 "$lc_spa" \
+				"$ROOTFS/usr/lib/aarch64-linux-gnu/spa-0.2/libcamera/libspa-libcamera.so"
+		fi
+	else
+		# Without the 0.5 stack the tuning files would break the 0.4 IPA
+		# (see nabu-camera/nabu-module.toml): leave the camera on the
+		# distro libcamera, which works but has no autofocus/calibration.
+		log "camera: no libcamera 0.5 tarball in $PACKAGES_DIR; keeping distro 0.4"
+	fi
 
 	install -d -m0700 "$ROOTFS/var/lib/tqftpserv/sensors/registry"
 

@@ -12,9 +12,11 @@
 # before calling `make`.  The kernel is cloned at the commit pinned in
 # repos.lock; the modules come from their 6.18.y branches.
 #
-# The only input that cannot be produced here is the proprietary firmware
-# package, which is extracted from the tablet.  It is published as a release
-# asset (tag "image-inputs") and downloaded into debian/packages.
+# Two kinds of input cannot be produced here: the proprietary firmware package,
+# which is extracted from the tablet, and the camera userspace (the libcamera
+# 0.5 stack + the PipeWire SPA plugin built against it) which is cross-built on
+# a developer machine by nabu-camera/scripts/.  Both are published as assets of
+# the "image-inputs" release and downloaded into debian/packages.
 
 name: image
 
@@ -140,6 +142,8 @@ jobs:
           gh release download image-inputs \
             --repo "$GITHUB_REPOSITORY" \
             --pattern '*_arm64.deb' \
+            --pattern 'libcamera-*-arm64.tar.gz' \
+            --pattern 'libspa-libcamera-*-arm64.so' \
             --dir "$WORKSPACE/nabu-main/debian/packages" \
             --clobber
 
