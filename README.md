@@ -54,7 +54,9 @@ Common targets:
 Switch product: `make PRODUCT=audio-only ...`.
 
 The Debian image build (migrated from `nabu-debian`) lives in [`debian/`](debian/README.md);
-`make debian-img` runs it inside the build container (privileged, with network).
+`make debian-img` runs it inside the build container (privileged, with network).  It takes
+`KERNEL_RELEASE` from the build tree (`<kv>-nabu-full-<content-hash>`), so run `make` (and
+`make deb-kernel`) first: the modules, the UKI and the image must come from the same build.
 
 ## Directory layout
 

@@ -191,7 +191,11 @@ HOST ?= 192.168.0.67
 DEB_INSTALL_ARGS ?=
 # The kernel debs are named after the product *release* (e.g. 6.18.59-nabu-full
 # for PRODUCT=production), so resolve @kv@ here where the lock is available.
-PRODUCT_RELEASE := $(shell python3 -c 'import tomllib,subprocess; p=tomllib.load(open("products/$(PRODUCT).toml","rb"))["product"]; kv=subprocess.run(["make","-s","-C","../$(KERNEL_PATH)","kernelversion"],capture_output=True,text=True).stdout.strip().splitlines()[-1]; print(p["release"].replace("@kv@",kv))' 2>/dev/null)
+# The release the image/UKI must use.  Prefer what the build tree actually
+# produced (kernel version + product suffix + content hash of the overlays,
+# e.g. 6.18.59-nabu-full-ebe2c77f); fall back to the value the tree would
+# produce now when nothing has been configured yet.
+PRODUCT_RELEASE := $(shell built=$$(cat $(KERNEL_OUT)/include/config/kernel.release 2>/dev/null); want=$$($(NABU) --product $(PRODUCT) release 2>/dev/null); prefix=$${want%-????????}; if [ "$${built#"$$prefix"-}" != "$$built" ]; then echo "$$built"; else echo "$$want"; fi)
 # Check the link first: building the kernel packages takes minutes and used to
 # fail at the very end with "cannot reach ... over ssh" when the tablet had
 # dropped off WiFi.

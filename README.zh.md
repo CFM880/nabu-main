@@ -50,7 +50,9 @@ sudo make rollback       # 回滚到安装前状态
 切换产品：`make PRODUCT=audio-only ...`。
 
 Debian 镜像构建(从 `nabu-debian` 迁移而来)位于 [`debian/`](debian/README.md);
-`make debian-img` 在构建容器里运行(特权 + 网络)。
+`make debian-img` 在构建容器里运行(特权 + 网络)。它从构建树读取
+`KERNEL_RELEASE`（`<kv>-nabu-full-<内容哈希>`），所以要先 `make`（以及
+`make deb-kernel`）：模块、UKI 与镜像必须来自同一次构建。
 
 ## 目录结构
 

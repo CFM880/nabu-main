@@ -52,7 +52,16 @@ MIRROR=${MIRROR:-https://mirrors.ustc.edu.cn/debian}
 ARCH=arm64
 
 PRODUCT=${PRODUCT:-production}
-KERNEL_RELEASE=${KERNEL_RELEASE:-6.14.11-nabu-full}
+# The release must match the kernel/modules that nabu-main built: the product
+# suffix plus a hash of every overlay/config that shapes them.  "make
+# debian-img" passes it; when called directly, read it back from the build
+# tree instead of falling back to a stale literal.
+KERNEL_RELEASE=${KERNEL_RELEASE:-$(cat "$KERNEL_OUT/include/config/kernel.release" 2>/dev/null || true)}
+[ -n "$KERNEL_RELEASE" ] || {
+	echo "KERNEL_RELEASE is unset and $KERNEL_OUT/include/config/kernel.release does not exist;" >&2
+	echo "run 'make PRODUCT=$PRODUCT' first, or pass KERNEL_RELEASE explicitly." >&2
+	exit 1
+}
 KEYRING=${NABU_KEYRING:-/usr/share/keyrings/debian-archive-keyring.gpg}
 
 PKG_BASE_VERSION=${PKG_BASE_VERSION:-7.2.7-1}

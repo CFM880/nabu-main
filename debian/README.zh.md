@@ -133,7 +133,7 @@ sudo ./build.sh --clean           # 清空 work/ 与 out/ 后重建
 |---|---|---|
 | `SUITE` | `trixie` | Debian 版本 |
 | `MIRROR` | USTC | Debian 镜像 |
-| `KERNEL_RELEASE` | `7.2.7-nabu-full` | 模块目录/UKI uname |
+| `KERNEL_RELEASE` | 从构建树读取（如 `6.18.59-nabu-full-ebe2c77f`） | 模块目录/UKI uname；`make debian-img` 自动传入 |
 | `NABU_PACKAGES_DIR` | `./packages` | 输入包目录 |
 | `PKG_BASE_VERSION` | `7.2.7-1` | 固件/用户态包版本 |
 | `FIRMWARE_VERSION` / `USERSPACE_VERSION` / `MODULES_VERSION` | 见上 | 各输入包版本 |
@@ -142,6 +142,18 @@ sudo ./build.sh --clean           # 清空 work/ 与 out/ 后重建
 | `NABU_USER` | `nabu` | 仅在 `NABU_INITIAL_SETUP=0` 时预建的第一个用户（uid 1000，加入 sudo） |
 | `NABU_PASSWORD` | `nabu` | 同上，初始密码 |
 | `NABU_LABEL` | `linux` | 根分区 PARTLABEL |
+
+打一版当前内核线的完整镜像（顺序很重要）：
+
+```sh
+make PRODUCT=production             # apply → … → package（内核 + UKI）
+make PRODUCT=production deb-kernel  # /lib/modules 用的 kernel/module deb
+make PRODUCT=production debian-img  # rootfs + UKI + esp.img / linux.img
+```
+
+必须先 `make`：模块、UKI、release 字符串必须来自同一次构建；`make debian-img`
+只负责把它们装进 rootfs 并打包。注意镜像里的 WiFi MAC 现在是**每机从 SoC 序列号派生**
+（见下文），不要再手工写死 MAC。
 
 镜像构建流程：
 
@@ -567,8 +579,12 @@ sudo ./deploy.sh --no-rootfs        # 或重新生成 esp.img
 - 若重新启用 USB console，`console=ttyGS0` 必须接在 `console=tty0` **之后**（保留 tty0
   为主 console），否则无主机连接时会影响启动；**当前默认配置已去掉 `console=ttyGS0`**
   （串口只用于登录 + `dmesg`，不再接收内核 printk，见「USB 串口调试」）。
-- **默认内核为 6.14.11**（`PRODUCT=production`、`KERNEL_RELEASE=6.14.11-nabu-full`）。
-  切回 7.2.7 用 `PRODUCT=production-7.2 KERNEL_RELEASE=7.2.7-nabu-full`。
+- **当前构建线是 6.18**（`repos.lock` 已切到 `linux-6.18.y`，`make switch LINE=6.18`）。
+  release 现在是「产品后缀 + 内容哈希」：所有 overlay 与 config 片段一变，哈希就变，
+  于是 `/lib/modules/<release>`、UKI 与构建树永远对得上（当前为
+  `6.18.59-nabu-full-ebe2c77f`）。`make debian-img` 会**自动**把这个字符串作为
+  `KERNEL_RELEASE` 传下去（直接调 `build.sh` 时同样从构建树读取，读不到就报错而不是瞎猜）；
+  切回 7.2.7 用 `PRODUCT=production-7.2`，交给 `make switch LINE=7.2` 处理。
   USB 串口 console 现在两个内核都有：`config/nabu-usb-console.config`
   （`CONFIG_USB_G_SERIAL=y`）已并入 `products/production.toml` 的 `kernel_config`。
   早先「7.2.7 上 `wlan_pd` 不加载、6.14.11 上正常」的说法已作废——真正变量是

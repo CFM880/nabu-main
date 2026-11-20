@@ -92,12 +92,27 @@ falls back to files already present on the host (`/lib/firmware`,
 directory with `NABU_PACKAGES_DIR`.
 
 The kernel `Image` and DTB come from `nabu-main`'s collected artifacts
-(`artifacts/$PRODUCT`, default `production` = `6.14.11-nabu-full`). Run
-`make package` first, then `make deb-kernel`: the image takes its `/lib/modules`
-tree from the `linux-image` deb, and on a fresh tree `build.sh` would try to
-build that deb from inside the container, where there is no docker.  (It only
-needs a panic-time rescuer otherwise; `make debian-img` after `make deb-kernel`
-is the documented order.)
+(`artifacts/$PRODUCT`).  A release is the product suffix plus a hash of every
+overlay and config fragment that shapes the kernel and its modules, so the
+built tree, `/lib/modules/<release>` and the UKI always agree
+(`6.18.59-nabu-full-ebe2c77f` on the current line).  `make debian-img` reads
+that string from the build tree and passes it as `KERNEL_RELEASE`; when
+`build.sh` is called directly it does the same and refuses to guess.
+
+A complete image build for the current line is therefore:
+
+```sh
+make PRODUCT=production             # apply -> ... -> package (kernel + UKI)
+make PRODUCT=production deb-kernel  # kernel/module debs for /lib/modules
+make PRODUCT=production debian-img  # rootfs + UKI + esp.img / linux.img
+```
+
+Run `make` first: the modules, the UKI and the release string must all come
+from the same build.  The image takes its `/lib/modules` tree from the
+`linux-image` deb, and on a fresh tree `build.sh` would try to build that deb
+from inside the container, where there is no docker (it is only needed as a
+panic-time rescuer otherwise; `make debian-img` after `make deb-kernel` is the
+documented order).
 
 ## Environment
 
@@ -106,7 +121,7 @@ is the documented order.)
 | `SUITE` | `trixie` | Debian suite |
 | `MIRROR` | USTC | Debian mirror |
 | `PRODUCT` | `production` | nabu-main product (artifact dir + DTB) |
-| `KERNEL_RELEASE` | `6.14.11-nabu-full` | module dir / UKI uname |
+| `KERNEL_RELEASE` | from the build tree, e.g. `6.18.59-nabu-full-ebe2c77f` | module dir / UKI uname; `make debian-img` passes it automatically |
 | `NABU_HOSTNAME` / `NABU_USER` / `NABU_PASSWORD` | `nabu-debian` / `nabu` / `nabu` | identity (only used when `NABU_INITIAL_SETUP=0`) |
 | `NABU_INITIAL_SETUP` | `1` | `1` = no pre-created user; GDM runs gnome-initial-setup on first boot (`0` = pre-create `NABU_USER`) |
 | `NABU_LABEL` | `linux` | root partition PARTLABEL |

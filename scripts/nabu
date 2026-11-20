@@ -876,7 +876,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
     for name in ("discover", "apply", "compose", "config", "build",
                  "collect", "package", "install", "rollback", "verify",
-                 "outdir", "switch", "all"):
+                 "outdir", "release", "switch", "all"):
         cmd = sub.add_parser(name)
         if name in ("apply", "all"):
             cmd.add_argument("--no-reset", action="store_true")
@@ -902,6 +902,13 @@ def main() -> None:
         order = select(modules, product)
         for mod in order:
             print(f"{mod.name}: {mod.description}")
+        return
+    if args.command == "release":
+        # The full release - kernel version, product suffix and the content
+        # hash of everything that shapes the kernel and its modules.  The
+        # debian image build must use exactly this string, otherwise
+        # /lib/modules/<release> in the image does not match the UKI.
+        print(load_product(args.product)["release"])
         return
     if args.command == "switch":
         cmd_switch(args)
