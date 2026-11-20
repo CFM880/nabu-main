@@ -1013,6 +1013,11 @@ EOF
 		install -d -m0755 "$ROOTFS/usr/local/share/libcamera/ipa/simple"
 		install -m0644 "$m/nabu-camera/camera-tuning/ov13b10.yaml" \
 			"$ROOTFS/usr/local/share/libcamera/ipa/simple/"
+		# A reused rootfs may still carry tuning files an older image put in
+		# the distro 0.4 directory; the 0.4 IPA cannot parse them, so drop
+		# them there (0.5 reads /usr/local).
+		rm -f "$ROOTFS/usr/share/libcamera/ipa/simple/ov13b10.yaml" \
+		      "$ROOTFS/usr/share/libcamera/ipa/simple/ov8856.yaml"
 		install -m0644 "$m/nabu-camera/camera-tuning/ov8856.yaml" \
 			"$ROOTFS/usr/local/share/libcamera/ipa/simple/"
 		grep -q '^GST_PLUGIN_PATH=' "$ROOTFS/etc/environment" 2>/dev/null ||
