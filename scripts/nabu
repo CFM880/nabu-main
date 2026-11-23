@@ -420,6 +420,10 @@ def cmd_apply(args) -> None:
     kernel = kernel_path(lock)
     if not args.no_reset:
         reset_kernel(kernel, lock["kernel"]["base"])
+        # The tree now reports the version of the new base; drop the cached
+        # kernel version so every later stage in this process (all runs the
+        # stages in one process) sees it instead of the pre-reset value.
+        _KV_CACHE.clear()
     else:
         head = run_capture(["git", "-C", kernel, "rev-parse", "HEAD"])
         if head != lock["kernel"]["base"]:

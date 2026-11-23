@@ -15,7 +15,7 @@ schema = 1
 # module on that line's branch, so the tree, the modules and the build
 # directory (out-<kernelversion>) always belong to the same kernel.
 path = "linux-6.18.y"
-base = "1253a6aa5d104312bf0992afacc15220ae35bdf9"
+base = "fd7cfd39c88596fec816639ad83cbf3e9d316372"
 
 # Known kernel lines.  `module_branch` is the branch every module is checked
 # out to for that line; the 6.14 line stays on each module's main branch.
@@ -26,8 +26,8 @@ module_branch = "main"
 
 [kernel.lines."6.18"]
 path = "linux-6.18.y"
-# v6.18.59, 2026-10-26.
-base = "1253a6aa5d104312bf0992afacc15220ae35bdf9"
+# v6.18.64, 2026-11-23.
+base = "fd7cfd39c88596fec816639ad83cbf3e9d316372"
 module_branch = "6.18.y"
 
 [modules]
